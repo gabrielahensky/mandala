@@ -11,13 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('transactions', function (Blueprint $table) {
+        Schema::create('tenants', function (Blueprint $table) {
             $table->id();
-            $table->enum('type', ['income', 'expense']);
-            $table->string('category');
-            $table->integer('amount');
-            $table->date('transacted_at');
-            $table->string('note')->nullable();
+            $table->string('name');
+            $table->string('phone')->nullable();
+            $table->text('note')->nullable();
             $table->timestamps();
         });
     }
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('transactions');
+        Schema::dropIfExists('tenants');
     }
 };

@@ -3,7 +3,7 @@
 namespace App\Livewire;
 
 use Livewire\Component;
-use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
 use Carbon\Carbon;
 
 class Dashboard extends Component
@@ -54,15 +54,13 @@ class Dashboard extends Component
             'note' => 'nullable|string|max:255',
         ]);
 
-        DB::table('transactions')->insert([
+        Transaction::create([
             'type' => $this->type,
             'category' => $this->category,
             'amount' => $this->amount,
             'transacted_at' => $this->transacted_at,
             'note' => $this->note,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        ]);        
 
         // reset input (ledger = append-only)
         $this->reset(['category', 'amount', 'note']);
@@ -95,15 +93,16 @@ class Dashboard extends Component
     {
         [$start, $end] = $this->getDateRange();
 
+        $baseQuery = Transaction::query()
+            ->whereBetween('transacted_at', [$start, $end]);
+
         // ---- SUMMARY ----
-        $income = DB::table('transactions')
+        $income = (clone $baseQuery)
             ->where('type', 'income')
-            ->whereBetween('transacted_at', [$start, $end])
             ->sum('amount');
 
-        $expense = DB::table('transactions')
+        $expense = (clone $baseQuery)
             ->where('type', 'expense')
-            ->whereBetween('transacted_at', [$start, $end])
             ->sum('amount');
 
         $this->summary = [
@@ -113,13 +112,12 @@ class Dashboard extends Component
         ];
 
         // ---- RECENT TRANSACTIONS ----
-        $this->transactions = DB::table('transactions')
-            ->whereBetween('transacted_at', [$start, $end])
+        $this->transactions = (clone $baseQuery)
             ->orderByDesc('transacted_at')
             ->limit(10)
             ->get()
             ->map(fn ($t) => [
-                'date' => $t->transacted_at,
+                'date' => $t->transacted_at->format('Y-m-d'),
                 'type' => $t->type,
                 'category' => $t->category,
                 'amount' => $t->amount,
@@ -128,10 +126,9 @@ class Dashboard extends Component
             ->toArray();
 
         // ---- INCOME BY CATEGORY ----
-        $this->incomeByCategory = DB::table('transactions')
-            ->select('category', DB::raw('SUM(amount) as total'))
+        $this->incomeByCategory = (clone $baseQuery)
             ->where('type', 'income')
-            ->whereBetween('transacted_at', [$start, $end])
+            ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
             ->orderByDesc('total')
             ->get()
@@ -142,10 +139,9 @@ class Dashboard extends Component
             ->toArray();
 
         // ---- EXPENSE BY CATEGORY ----
-        $this->expenseByCategory = DB::table('transactions')
-            ->select('category', DB::raw('SUM(amount) as total'))
+        $this->expenseByCategory = (clone $baseQuery)
             ->where('type', 'expense')
-            ->whereBetween('transacted_at', [$start, $end])
+            ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
             ->orderByDesc('total')
             ->get()
@@ -163,6 +159,6 @@ class Dashboard extends Component
     public function render()
     {
         return view('livewire.dashboard')
-            ->layout('layouts.app');
+        ->layout('layouts.dashboard');
     }
 }
