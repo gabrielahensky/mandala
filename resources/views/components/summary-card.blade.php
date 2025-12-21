@@ -4,12 +4,12 @@
     'color' => 'text-gray-900'
 ])
 
-<div class="bg-white p-5 rounded-lg shadow-sm w-52">
-    <p class="text-sm text-gray-500">
+<div class="bg-white p-5 rounded-xl shadow-sm w-56">
+    <p class="text-xs uppercase tracking-wide text-gray-400">
         {{ $label }}
     </p>
 
-    <p class="text-xl font-bold {{ $color }}">
+    <p class="mt-1 text-2xl font-semibold {{ $color }}">
         Rp {{ number_format($value) }}
     </p>
 </div>

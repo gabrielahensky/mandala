@@ -1,42 +1,60 @@
-<div class="p-10 space-y-10">
+<div class="px-4 py-6 sm:px-8 sm:py-10 space-y-12">
 
-    <!-- TITLE -->
-    <h1 class="text-2xl font-bold">
-        Mandala — Financial Overview
-    </h1>
+    <!-- HEADER -->
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold">
+                Mandala
+            </h1>
+            <p class="text-sm text-gray-500">
+                Financial Overview
+            </p>
+        </div>
 
-    <!-- DATE RANGE TOGGLE -->
-    <div class="flex gap-2">
-        <button
-            wire:click="changeRange('this_month')"
-            class="px-3 py-1 rounded
-                   {{ $range === 'this_month'
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-200 text-gray-800' }}">
-            This Month
-        </button>
+        <!-- DATE RANGE TOGGLE -->
+        <div class="flex flex-col items-end gap-1">
+            <div class="flex gap-1 bg-gray-200 p-1 rounded-lg">
+                <button
+                    wire:click="changeRange('this_month')"
+                    class="px-3 py-1 rounded-md text-sm
+                        {{ $range === 'this_month'
+                            ? 'bg-white shadow text-gray-900'
+                            : 'text-gray-600' }}">
+                    This Month
+                </button>
 
-        <button
-            wire:click="changeRange('last_month')"
-            class="px-3 py-1 rounded
-                   {{ $range === 'last_month'
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-200 text-gray-800' }}">
-            Last Month
-        </button>
+                <button
+                    wire:click="changeRange('last_month')"
+                    class="px-3 py-1 rounded-md text-sm
+                        {{ $range === 'last_month'
+                            ? 'bg-white shadow text-gray-900'
+                            : 'text-gray-600' }}">
+                    Last Month
+                </button>
+            </div>
+
+            <span
+                wire:loading
+                wire:target="range"
+                class="text-xs text-gray-400">
+                Updating…
+            </span>
+        </div>
     </div>
 
     <!-- ADD TRANSACTION -->
-    <section class="bg-white p-6 rounded-lg shadow-sm space-y-4">
-        <h2 class="font-semibold">
+    <section class="bg-white/60 backdrop-blur p-5 rounded-xl border space-y-4">
+        <h2 class="text-sm font-semibold text-gray-600">
             Add Transaction
         </h2>
 
-        <form wire:submit.prevent="addTransaction"
-              class="flex flex-wrap gap-3">
+        <form
+            wire:submit.prevent="addTransaction"
+            class="flex flex-wrap gap-3">
 
-            <select wire:model="type"
-                    class="border rounded px-3 py-2">
+            <select
+                wire:model="type"
+                class="border rounded px-3 py-2">
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
             </select>
@@ -80,7 +98,7 @@
     </section>
 
     <!-- SUMMARY -->
-    <section class="flex gap-5">
+    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <x-summary-card
             label="Income"
             :value="$summary['income'] ?? 0"
@@ -106,8 +124,8 @@
             Recent Transactions
         </h2>
 
-        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-            <table class="w-full text-sm">
+        <div class="overflow-x-auto bg-white rounded-lg shadow-sm">
+            <table class="min-w-[700px] w-full text-sm">
                 <thead class="bg-gray-100 text-left">
                     <tr>
                         <th class="px-4 py-2">Date</th>
@@ -119,19 +137,25 @@
                 </thead>
                 <tbody>
                     @forelse ($transactions as $t)
-                        <tr class="border-t">
-                            <td class="px-4 py-2">{{ $t['date'] }}</td>
+                        <tr class="border-t hover:bg-gray-50">
+                            <td class="px-4 py-2 text-xs text-gray-500">
+                                {{ $t['date'] }}
+                            </td>
                             <td class="px-4 py-2">
                                 {{ strtoupper($t['type']) }}
                             </td>
-                            <td class="px-4 py-2">{{ $t['category'] }}</td>
+                            <td class="px-4 py-2">
+                                {{ $t['category'] }}
+                            </td>
                             <td class="px-4 py-2 text-right
                                 {{ $t['type'] === 'expense'
                                     ? 'text-red-600'
                                     : 'text-green-600' }}">
                                 Rp {{ number_format($t['amount']) }}
                             </td>
-                            <td class="px-4 py-2">{{ $t['note'] }}</td>
+                            <td class="px-4 py-2 text-gray-500">
+                                {{ $t['note'] }}
+                            </td>
                         </tr>
                     @empty
                         <tr>
@@ -147,7 +171,7 @@
     </section>
 
     <!-- BREAKDOWN -->
-    <section class="grid grid-cols-2 gap-10">
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-8">
 
         <!-- Income Breakdown -->
         <div class="space-y-2">
@@ -159,8 +183,10 @@
                 <table class="w-full text-sm">
                     <tbody>
                         @forelse ($incomeByCategory as $row)
-                            <tr class="border-t">
-                                <td class="px-4 py-2">{{ $row['category'] }}</td>
+                            <tr class="border-t hover:bg-gray-50">
+                                <td class="px-4 py-2">
+                                    {{ $row['category'] }}
+                                </td>
                                 <td class="px-4 py-2 text-right text-green-600">
                                     Rp {{ number_format($row['total']) }}
                                 </td>
@@ -188,8 +214,10 @@
                 <table class="w-full text-sm">
                     <tbody>
                         @forelse ($expenseByCategory as $row)
-                            <tr class="border-t">
-                                <td class="px-4 py-2">{{ $row['category'] }}</td>
+                            <tr class="border-t hover:bg-gray-50">
+                                <td class="px-4 py-2">
+                                    {{ $row['category'] }}
+                                </td>
                                 <td class="px-4 py-2 text-right text-red-600">
                                     Rp {{ number_format($row['total']) }}
                                 </td>
