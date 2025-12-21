@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Mandala</title>
+
+    {{-- VITE ASSETS --}}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- LIVEWIRE --}}
     @livewireStyles
 </head>
-<body style="background:#f3f4f6; font-family: sans-serif;">
+<body class="bg-gray-100 font-sans">
     {{ $slot }}
 
     @livewireScripts

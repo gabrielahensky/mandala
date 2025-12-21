@@ -1,39 +1,42 @@
-<div style="padding:40px">
+<div class="p-10 space-y-10">
 
     <!-- TITLE -->
-    <h1 style="font-size:24px; font-weight:bold; margin-bottom:20px">
+    <h1 class="text-2xl font-bold">
         Mandala — Financial Overview
     </h1>
 
     <!-- DATE RANGE TOGGLE -->
-    <div style="margin-bottom:20px">
+    <div class="flex gap-2">
         <button
             wire:click="changeRange('this_month')"
-            style="padding:6px 12px; margin-right:6px;
-                background:{{ $range === 'this_month' ? '#111' : '#e5e7eb' }};
-                color:{{ $range === 'this_month' ? '#fff' : '#000' }};">
+            class="px-3 py-1 rounded
+                   {{ $range === 'this_month'
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-gray-200 text-gray-800' }}">
             This Month
         </button>
 
         <button
             wire:click="changeRange('last_month')"
-            style="padding:6px 12px;
-                background:{{ $range === 'last_month' ? '#111' : '#e5e7eb' }};
-                color:{{ $range === 'last_month' ? '#fff' : '#000' }};">
+            class="px-3 py-1 rounded
+                   {{ $range === 'last_month'
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-gray-200 text-gray-800' }}">
             Last Month
         </button>
     </div>
 
     <!-- ADD TRANSACTION -->
-    <div style="margin-bottom:30px; background:white; padding:20px; border-radius:8px">
-        <h2 style="font-weight:bold; margin-bottom:10px">
+    <section class="bg-white p-6 rounded-lg shadow-sm space-y-4">
+        <h2 class="font-semibold">
             Add Transaction
         </h2>
 
         <form wire:submit.prevent="addTransaction"
-              style="display:flex; gap:10px; flex-wrap:wrap">
+              class="flex flex-wrap gap-3">
 
-            <select wire:model="type" style="padding:8px">
+            <select wire:model="type"
+                    class="border rounded px-3 py-2">
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
             </select>
@@ -42,7 +45,7 @@
                 type="text"
                 wire:model="category"
                 placeholder="Category"
-                style="padding:8px"
+                class="border rounded px-3 py-2"
                 required
             />
 
@@ -50,14 +53,14 @@
                 type="number"
                 wire:model="amount"
                 placeholder="Amount"
-                style="padding:8px"
+                class="border rounded px-3 py-2"
                 required
             />
 
             <input
                 type="date"
                 wire:model="transacted_at"
-                style="padding:8px"
+                class="border rounded px-3 py-2"
                 required
             />
 
@@ -65,78 +68,75 @@
                 type="text"
                 wire:model="note"
                 placeholder="Note (optional)"
-                style="padding:8px; flex:1"
+                class="border rounded px-3 py-2 flex-1"
             />
 
             <button
                 type="submit"
-                style="padding:8px 16px; background:black; color:white; border:none">
+                class="px-4 py-2 bg-gray-900 text-white rounded">
                 Add
             </button>
-
         </form>
-    </div>
+    </section>
 
     <!-- SUMMARY -->
-    <div style="display:flex; gap:20px">
+    <section class="flex gap-5">
+        <x-summary-card
+            label="Income"
+            :value="$summary['income'] ?? 0"
+            color="text-green-600"
+        />
 
-        <div style="background:white; padding:20px; border-radius:8px; width:200px">
-            <p style="color:#6b7280">Income</p>
-            <p style="font-size:20px; font-weight:bold; color:green">
-                Rp {{ number_format($summary['income'] ?? 0) }}
-            </p>
-        </div>
+        <x-summary-card
+            label="Expense"
+            :value="$summary['expense'] ?? 0"
+            color="text-red-600"
+        />
 
-        <div style="background:white; padding:20px; border-radius:8px; width:200px">
-            <p style="color:#6b7280">Expense</p>
-            <p style="font-size:20px; font-weight:bold; color:red">
-                Rp {{ number_format($summary['expense'] ?? 0) }}
-            </p>
-        </div>
-
-        <div style="background:white; padding:20px; border-radius:8px; width:200px">
-            <p style="color:#6b7280">Balance</p>
-            <p style="font-size:20px; font-weight:bold">
-                Rp {{ number_format($summary['balance'] ?? 0) }}
-            </p>
-        </div>
-
-    </div>
+        <x-summary-card
+            label="Balance"
+            :value="$summary['balance'] ?? 0"
+            color="text-gray-900"
+        />
+    </section>
 
     <!-- RECENT TRANSACTIONS -->
-    <div style="margin-top:40px">
-        <h2 style="font-size:18px; font-weight:bold; margin-bottom:12px">
+    <section class="space-y-3">
+        <h2 class="text-lg font-semibold">
             Recent Transactions
         </h2>
 
-        <div style="background:white; border-radius:8px; overflow:hidden">
-            <table style="width:100%; border-collapse:collapse">
-                <thead style="background:#f9fafb">
+        <div class="bg-white rounded-lg overflow-hidden shadow-sm">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-100 text-left">
                     <tr>
-                        <th style="padding:10px; text-align:left">Date</th>
-                        <th style="padding:10px; text-align:left">Type</th>
-                        <th style="padding:10px; text-align:left">Category</th>
-                        <th style="padding:10px; text-align:right">Amount</th>
-                        <th style="padding:10px; text-align:left">Note</th>
+                        <th class="px-4 py-2">Date</th>
+                        <th class="px-4 py-2">Type</th>
+                        <th class="px-4 py-2">Category</th>
+                        <th class="px-4 py-2 text-right">Amount</th>
+                        <th class="px-4 py-2">Note</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($transactions as $t)
-                        <tr style="border-top:1px solid #eee">
-                            <td style="padding:10px">{{ $t['date'] }}</td>
-                            <td style="padding:10px">
+                        <tr class="border-t">
+                            <td class="px-4 py-2">{{ $t['date'] }}</td>
+                            <td class="px-4 py-2">
                                 {{ strtoupper($t['type']) }}
                             </td>
-                            <td style="padding:10px">{{ $t['category'] }}</td>
-                            <td style="padding:10px; text-align:right;
-                                color:{{ $t['type'] === 'expense' ? 'red' : 'green' }}">
+                            <td class="px-4 py-2">{{ $t['category'] }}</td>
+                            <td class="px-4 py-2 text-right
+                                {{ $t['type'] === 'expense'
+                                    ? 'text-red-600'
+                                    : 'text-green-600' }}">
                                 Rp {{ number_format($t['amount']) }}
                             </td>
-                            <td style="padding:10px">{{ $t['note'] }}</td>
+                            <td class="px-4 py-2">{{ $t['note'] }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" style="padding:10px; color:#6b7280">
+                            <td colspan="5"
+                                class="px-4 py-4 text-gray-500">
                                 No transactions
                             </td>
                         </tr>
@@ -144,30 +144,31 @@
                 </tbody>
             </table>
         </div>
-    </div>
+    </section>
 
     <!-- BREAKDOWN -->
-    <div style="margin-top:40px; display:flex; gap:40px">
+    <section class="grid grid-cols-2 gap-10">
 
         <!-- Income Breakdown -->
-        <div style="flex:1">
-            <h3 style="font-size:16px; font-weight:bold; margin-bottom:10px">
+        <div class="space-y-2">
+            <h3 class="font-semibold">
                 Income by Category
             </h3>
 
-            <div style="background:white; border-radius:8px; overflow:hidden">
-                <table style="width:100%">
+            <div class="bg-white rounded-lg overflow-hidden shadow-sm">
+                <table class="w-full text-sm">
                     <tbody>
                         @forelse ($incomeByCategory as $row)
-                            <tr style="border-top:1px solid #eee">
-                                <td style="padding:10px">{{ $row['category'] }}</td>
-                                <td style="padding:10px; text-align:right; color:green">
+                            <tr class="border-t">
+                                <td class="px-4 py-2">{{ $row['category'] }}</td>
+                                <td class="px-4 py-2 text-right text-green-600">
                                     Rp {{ number_format($row['total']) }}
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="2" style="padding:10px; color:#6b7280">
+                                <td colspan="2"
+                                    class="px-4 py-4 text-gray-500">
                                     No income data
                                 </td>
                             </tr>
@@ -178,24 +179,25 @@
         </div>
 
         <!-- Expense Breakdown -->
-        <div style="flex:1">
-            <h3 style="font-size:16px; font-weight:bold; margin-bottom:10px">
+        <div class="space-y-2">
+            <h3 class="font-semibold">
                 Expense by Category
             </h3>
 
-            <div style="background:white; border-radius:8px; overflow:hidden">
-                <table style="width:100%">
+            <div class="bg-white rounded-lg overflow-hidden shadow-sm">
+                <table class="w-full text-sm">
                     <tbody>
                         @forelse ($expenseByCategory as $row)
-                            <tr style="border-top:1px solid #eee">
-                                <td style="padding:10px">{{ $row['category'] }}</td>
-                                <td style="padding:10px; text-align:right; color:red">
+                            <tr class="border-t">
+                                <td class="px-4 py-2">{{ $row['category'] }}</td>
+                                <td class="px-4 py-2 text-right text-red-600">
                                     Rp {{ number_format($row['total']) }}
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="2" style="padding:10px; color:#6b7280">
+                                <td colspan="2"
+                                    class="px-4 py-4 text-gray-500">
                                     No expense data
                                 </td>
                             </tr>
@@ -205,6 +207,6 @@
             </div>
         </div>
 
-    </div>
+    </section>
 
 </div>
