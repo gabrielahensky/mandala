@@ -1,135 +1,110 @@
-<div class="px-4 py-6 sm:px-8 sm:py-10 space-y-12">
+<div class="px-6 py-6 space-y-10">
 
-    <!-- HEADER -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    {{-- HEADER --}}
+    <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-bold">
-                Mandala
+                Dashboard
             </h1>
             <p class="text-sm text-gray-500">
-                Financial Overview
+                Overview of your finances & rental status
             </p>
         </div>
 
-        <!-- DATE RANGE TOGGLE -->
-        <div class="flex flex-col items-end gap-1">
-            <div class="flex gap-1 bg-gray-200 p-1 rounded-lg">
-                <button
-                    wire:click="changeRange('this_month')"
-                    class="px-3 py-1 rounded-md text-sm
-                        {{ $range === 'this_month'
-                            ? 'bg-white shadow text-gray-900'
-                            : 'text-gray-600' }}">
-                    This Month
-                </button>
-
-                <button
-                    wire:click="changeRange('last_month')"
-                    class="px-3 py-1 rounded-md text-sm
-                        {{ $range === 'last_month'
-                            ? 'bg-white shadow text-gray-900'
-                            : 'text-gray-600' }}">
-                    Last Month
-                </button>
+        @if ($unpaidCount > 0)
+        <section class="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between">
+            <div>
+                <p class="font-semibold text-red-700">
+                    {{ $unpaidCount }} tenant belum membayar sewa
+                </p>
+                <p class="text-sm text-red-600">
+                    Segera cek untuk menghindari tunggakan
+                </p>
             </div>
 
-            <span
-                wire:loading
-                wire:target="range"
-                class="text-xs text-gray-400">
-                Updating…
-            </span>
+            <a href="/rent/unpaid"
+            class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+                Lihat Detail
+            </a>
+        </section>
+        @endif
+
+        {{-- RANGE --}}
+        <div class="flex gap-1 bg-gray-200 p-1 rounded-lg">
+            <button
+                wire:click="changeRange('this_month')"
+                class="px-3 py-1 rounded-md text-sm
+                {{ $range === 'this_month'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-600' }}">
+                This Month
+            </button>
+
+            <button
+                wire:click="changeRange('last_month')"
+                class="px-3 py-1 rounded-md text-sm
+                {{ $range === 'last_month'
+                    ? 'bg-white shadow text-gray-900'
+                    : 'text-gray-600' }}">
+                Last Month
+            </button>
         </div>
     </div>
 
-    <!-- ADD TRANSACTION -->
-    <section class="bg-white/60 backdrop-blur p-5 rounded-xl border space-y-4">
-        <h2 class="text-sm font-semibold text-gray-600">
-            Add Transaction
-        </h2>
-
-        <form
-            wire:submit.prevent="addTransaction"
-            class="flex flex-wrap gap-3">
-
-            <select
-                wire:model="type"
-                class="border rounded px-3 py-2">
-                <option value="income">Income</option>
-                <option value="expense">Expense</option>
-            </select>
-
-            <input
-                type="text"
-                wire:model="category"
-                placeholder="Category"
-                class="border rounded px-3 py-2"
-                required
-            />
-
-            <input
-                type="number"
-                wire:model="amount"
-                placeholder="Amount"
-                class="border rounded px-3 py-2"
-                required
-            />
-
-            <input
-                type="date"
-                wire:model="transacted_at"
-                class="border rounded px-3 py-2"
-                required
-            />
-
-            <input
-                type="text"
-                wire:model="note"
-                placeholder="Note (optional)"
-                class="border rounded px-3 py-2 flex-1"
-            />
-
-            <button
-                type="submit"
-                class="px-4 py-2 bg-gray-900 text-white rounded">
-                Add
-            </button>
-        </form>
-    </section>
-
-    <!-- SUMMARY -->
+    {{-- HEALTH SNAPSHOT --}}
     <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <x-summary-card
-            label="Income"
-            :value="$summary['income'] ?? 0"
-            color="text-green-600"
-        />
 
-        <x-summary-card
-            label="Expense"
-            :value="$summary['expense'] ?? 0"
-            color="text-red-600"
-        />
+        <div class="bg-white p-5 rounded-xl border">
+            <p class="text-xs text-gray-500">Total Income</p>
+            <p class="text-2xl font-bold text-green-600">
+                Rp {{ number_format($summary['income'] ?? 0) }}
+            </p>
+        </div>
 
-        <x-summary-card
-            label="Balance"
-            :value="$summary['balance'] ?? 0"
-            color="text-gray-900"
-        />
+        <div class="bg-white p-5 rounded-xl border">
+            <p class="text-xs text-gray-500">Total Expense</p>
+            <p class="text-2xl font-bold text-red-600">
+                Rp {{ number_format($summary['expense'] ?? 0) }}
+            </p>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border">
+            <p class="text-xs text-gray-500">Net Balance</p>
+            <p class="text-2xl font-bold">
+                Rp {{ number_format($summary['balance'] ?? 0) }}
+            </p>
+        </div>
+
     </section>
 
-    <!-- RECENT TRANSACTIONS -->
+    {{-- ACTION / ALERT --}}
+    <section class="bg-white rounded-xl border p-5 flex items-center justify-between">
+        <div>
+            <p class="font-semibold">
+                Rent Attention Needed
+            </p>
+            <p class="text-sm text-gray-500">
+                Check tenants who haven’t paid rent yet
+            </p>
+        </div>
+
+        <a href="/rent/unpaid"
+           class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700">
+            View Unpaid Rent
+        </a>
+    </section>
+
+    {{-- RECENT TRANSACTIONS --}}
     <section class="space-y-3">
         <h2 class="text-lg font-semibold">
             Recent Transactions
         </h2>
 
-        <div class="overflow-x-auto bg-white rounded-lg shadow-sm">
-            <table class="min-w-[700px] w-full text-sm">
-                <thead class="bg-gray-100 text-left">
+        <div class="bg-white rounded-xl border overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-100">
                     <tr>
                         <th class="px-4 py-2">Date</th>
-                        <th class="px-4 py-2">Type</th>
                         <th class="px-4 py-2">Category</th>
                         <th class="px-4 py-2 text-right">Amount</th>
                         <th class="px-4 py-2">Note</th>
@@ -140,9 +115,6 @@
                         <tr class="border-t hover:bg-gray-50">
                             <td class="px-4 py-2 text-xs text-gray-500">
                                 {{ $t['date'] }}
-                            </td>
-                            <td class="px-4 py-2">
-                                {{ strtoupper($t['type']) }}
                             </td>
                             <td class="px-4 py-2">
                                 {{ $t['category'] }}
@@ -159,8 +131,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5"
-                                class="px-4 py-4 text-gray-500">
+                            <td colspan="4" class="px-4 py-6 text-center text-gray-500">
                                 No transactions
                             </td>
                         </tr>
@@ -170,71 +141,82 @@
         </div>
     </section>
 
-    <!-- BREAKDOWN -->
-    <section class="grid grid-cols-1 md:grid-cols-2 gap-8">
+    {{-- CATEGORY SNAPSHOT --}}
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-        <!-- Income Breakdown -->
-        <div class="space-y-2">
-            <h3 class="font-semibold">
-                Income by Category
+        <div class="bg-white rounded-xl border p-4">
+            <h3 class="font-semibold mb-3">
+                Income Breakdown
             </h3>
 
-            <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                <table class="w-full text-sm">
-                    <tbody>
-                        @forelse ($incomeByCategory as $row)
-                            <tr class="border-t hover:bg-gray-50">
-                                <td class="px-4 py-2">
-                                    {{ $row['category'] }}
-                                </td>
-                                <td class="px-4 py-2 text-right text-green-600">
-                                    Rp {{ number_format($row['total']) }}
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="2"
-                                    class="px-4 py-4 text-gray-500">
-                                    No income data
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+            @forelse ($incomeByCategory as $row)
+                <div class="flex justify-between text-sm py-1">
+                    <span>{{ $row['category'] }}</span>
+                    <span class="text-green-600">
+                        Rp {{ number_format($row['total']) }}
+                    </span>
+                </div>
+            @empty
+                <p class="text-sm text-gray-500">
+                    No income data
+                </p>
+            @endforelse
         </div>
 
-        <!-- Expense Breakdown -->
-        <div class="space-y-2">
-            <h3 class="font-semibold">
-                Expense by Category
+        <div class="bg-white rounded-xl border p-4">
+            <h3 class="font-semibold mb-3">
+                Expense Breakdown
             </h3>
 
-            <div class="bg-white rounded-lg overflow-hidden shadow-sm">
-                <table class="w-full text-sm">
-                    <tbody>
-                        @forelse ($expenseByCategory as $row)
-                            <tr class="border-t hover:bg-gray-50">
-                                <td class="px-4 py-2">
-                                    {{ $row['category'] }}
-                                </td>
-                                <td class="px-4 py-2 text-right text-red-600">
-                                    Rp {{ number_format($row['total']) }}
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="2"
-                                    class="px-4 py-4 text-gray-500">
-                                    No expense data
-                                </td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
+            @forelse ($expenseByCategory as $row)
+                <div class="flex justify-between text-sm py-1">
+                    <span>{{ $row['category'] }}</span>
+                    <span class="text-red-600">
+                        Rp {{ number_format($row['total']) }}
+                    </span>
+                </div>
+            @empty
+                <p class="text-sm text-gray-500">
+                    No expense data
+                </p>
+            @endforelse
         </div>
 
+    </section>
+
+    {{-- ADD TRANSACTION (DE-EMPHASIZED) --}}
+    <section class="bg-white/60 border rounded-xl p-5">
+        <details>
+            <summary class="cursor-pointer font-semibold text-sm text-gray-600">
+                + Add Transaction
+            </summary>
+
+            <form
+                wire:submit.prevent="addTransaction"
+                class="flex flex-wrap gap-3 mt-4">
+
+                <select wire:model="type" class="border rounded px-3 py-2">
+                    <option value="income">Income</option>
+                    <option value="expense">Expense</option>
+                </select>
+
+                <input wire:model="category" placeholder="Category"
+                       class="border rounded px-3 py-2" required />
+
+                <input wire:model="amount" type="number"
+                       class="border rounded px-3 py-2" required />
+
+                <input wire:model="transacted_at" type="date"
+                       class="border rounded px-3 py-2" required />
+
+                <input wire:model="note" placeholder="Note"
+                       class="border rounded px-3 py-2 flex-1" />
+
+                <button class="px-4 py-2 bg-gray-900 text-white rounded">
+                    Add
+                </button>
+            </form>
+        </details>
     </section>
 
 </div>

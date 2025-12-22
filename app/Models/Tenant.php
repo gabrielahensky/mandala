@@ -11,4 +11,16 @@ class Tenant extends Model
         'phone',
         'note',
     ];
+
+    public function rentCycles()
+    {
+        return $this->hasMany(RentCycle::class);
+    }
+
+    public function activeRent()
+    {
+        return $this->hasOne(RentCycle::class)
+            ->whereNull('end_date');
+    }
+
 }

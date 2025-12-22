@@ -5,6 +5,7 @@ namespace App\Livewire;
 use Livewire\Component;
 use App\Models\Transaction;
 use Carbon\Carbon;
+use App\Services\RentBillingService;
 
 class Dashboard extends Component
 {
@@ -20,6 +21,7 @@ class Dashboard extends Component
     public int $amount = 0;
     public string $transacted_at = '';
     public ?string $note = null;
+    public int $unpaidCount = 0;
 
     // ===== Date Range State =====
     public string $range = 'this_month';
@@ -150,6 +152,13 @@ class Dashboard extends Component
                 'total' => $r->total,
             ])
             ->toArray();
+
+        // ===== UNPAID COUNT =====
+        $billing = app(RentBillingService::class);
+
+        $this->unpaidCount = $billing
+            ->unpaidSummaryForMonth(Carbon::now())
+            ->count();
     }
 
     /* =========================

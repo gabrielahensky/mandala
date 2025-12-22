@@ -13,37 +13,87 @@
 
     <!-- SIDEBAR -->
     <aside class="w-64 bg-gray-900 text-gray-100 flex flex-col">
-        <!-- Logo / Brand -->
+
+        <!-- BRAND -->
         <div class="px-6 py-4 border-b border-gray-800 space-y-1">
-            <x-app-logo />
+            <div class="flex items-center gap-2">
+                <x-app-logo />
+                
+            </div>
 
             <p class="text-xs text-gray-400">
                 Internal Dashboard
             </p>
         </div>
 
-        <!-- Menu -->
-        <nav class="flex-1 px-3 py-4 space-y-1 text-sm">
+        <!-- MENU -->
+        <nav class="flex-1 px-3 py-4 space-y-6 text-sm">
 
-            <a href="/"
-            class="block px-3 py-2 rounded
-                    {{ request()->is('/') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
-                Dashboard
-            </a>
+            <!-- FINANCE -->
+            <div>
+                <p class="px-3 mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Finance
+                </p>
 
-            <a href="/ledger"
-            class="block px-3 py-2 rounded
-                    {{ request()->is('ledger') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
-                Ledger
-            </a>
+                <a href="/"
+                   class="block px-3 py-2 rounded
+                   {{ request()->is('/') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                    Dashboard
+                </a>
 
-            <span class="block px-3 py-2 rounded text-gray-500 cursor-not-allowed">
-                Settings
-            </span>
+                <a href="/ledger"
+                   class="block px-3 py-2 rounded
+                   {{ request()->is('ledger*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                    Ledger
+                </a>
+
+                <a href="/rent/unpaid"
+                    class="flex items-center justify-between px-3 py-2 rounded
+                            {{ request()->is('rent/unpaid') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+
+                        <span>Unpaid Rent</span>
+
+                        @if ($unpaidCount > 0)
+                            <span class="px-2 py-0.5 text-xs bg-red-600 text-white rounded-full">
+                                {{ $unpaidCount }}
+                            </span>
+                        @endif
+                </a>
+            </div>
+
+            <!-- KOS MANAGEMENT -->
+            <div>
+                <p class="px-3 mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Kos Management
+                </p>
+
+                <a href="/units"
+                   class="block px-3 py-2 rounded
+                   {{ request()->is('units*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                    Units
+                </a>
+
+                <a href="/tenants"
+                   class="block px-3 py-2 rounded
+                   {{ request()->is('tenants*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                    Tenants
+                </a>
+            </div>
+
+            <!-- SYSTEM -->
+            <div>
+                <p class="px-3 mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    System
+                </p>
+
+                <span class="block px-3 py-2 rounded text-gray-500 cursor-not-allowed">
+                    Settings
+                </span>
+            </div>
 
         </nav>
 
-        <!-- Footer -->
+        <!-- FOOTER -->
         <div class="px-6 py-4 border-t border-gray-800 text-xs text-gray-400">
             v0.1 • Mandala
         </div>
