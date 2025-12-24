@@ -24,21 +24,41 @@ class RentCycleService
             ? Carbon::parse($startDate)
             : now();
 
-        // RULE: unit must be free
-        if ($unit->activeRent) {
+        /*
+        |--------------------------------------------------------------------------
+        | HARD GUARDS (SOURCE OF TRUTH)
+        |--------------------------------------------------------------------------
+        */
+
+        // 1️⃣ Unit TIDAK boleh punya active rent
+        $hasActiveRent = RentCycle::query()
+            ->where('unit_id', $unit->id)
+            ->whereNull('end_date')
+            ->exists();
+
+        if ($hasActiveRent) {
             throw ValidationException::withMessages([
                 'unit' => 'Unit is already occupied.',
             ]);
         }
 
-        // RULE: tenant must not have active rent
-        if ($tenant->activeRent) {
+        // 2️⃣ Tenant TIDAK boleh punya active rent
+        $tenantHasActiveRent = RentCycle::query()
+            ->where('tenant_id', $tenant->id)
+            ->whereNull('end_date')
+            ->exists();
+
+        if ($tenantHasActiveRent) {
             throw ValidationException::withMessages([
                 'tenant' => 'Tenant already has an active rent.',
             ]);
         }
 
-        // SNAPSHOT PRICE
+        /*
+        |--------------------------------------------------------------------------
+        | SNAPSHOT PRICE
+        |--------------------------------------------------------------------------
+        */
         $finalMonthlyRent = $monthlyRent ?? $unit->base_price;
 
         if ($finalMonthlyRent === null) {
@@ -47,23 +67,18 @@ class RentCycleService
             ]);
         }
 
-        // CREATE RENT CYCLE
-        $rent = RentCycle::create([
-            'unit_id'      => $unit->id,
-            'tenant_id'    => $tenant->id,
-            'start_date'   => $startDate,
+        /*
+        |--------------------------------------------------------------------------
+        | CREATE RENT CYCLE
+        |--------------------------------------------------------------------------
+        */
+        return RentCycle::create([
+            'unit_id' => $unit->id,
+            'tenant_id' => $tenant->id,
+            'start_date' => $startDate,
             'monthly_rent' => $finalMonthlyRent,
-            'note'         => $note,
+            'note' => $note,
         ]);
-
-        // CREATE FIRST INVOICE (MONTH OF START)
-        app(RentInvoiceService::class)
-            ->generateForRent(
-                $rent,
-                $startDate->copy()->startOfMonth()
-            );
-
-        return $rent;
     }
 
     /**

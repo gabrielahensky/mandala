@@ -42,11 +42,11 @@ class Units extends Component
     protected function loadUnits(): void
     {
         $this->units = Unit::query()
-        ->with([
-            'activeRent.tenant',
-        ])
-        ->orderBy('name')
-        ->get();
+            ->with([
+                'activeRent.tenant',
+            ])
+            ->orderBy('name')
+            ->get();
     }
 
     /* =========================

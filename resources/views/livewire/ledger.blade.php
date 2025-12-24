@@ -1,265 +1,246 @@
-<div class="px-4 py-6 sm:px-8 sm:py-10 space-y-6">
+<div class="px-4 py-6 sm:px-8 sm:py-8 space-y-6">
 
-    <!-- HEADER -->
-    <div>
-        <h1 class="text-2xl font-bold">
-            Ledger
-        </h1>
-        <p class="text-sm text-gray-500">
-            Financial records • {{ \Carbon\Carbon::createFromFormat('Y-m', $month)->format('F Y') }}
-        </p>
+    {{-- =========================
+        HEADER
+    ========================== --}}
+    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold">Ledger</h1>
+
+            <p class="text-sm text-gray-500">
+                Financial records
+                @if ($month)
+                    • {{ $month }}
+                @endif
+            </p>
+
+            <div class="pt-2">
+                <button
+                    wire:click="openTransactionModal"
+                    class="px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-800">
+                    + Add Transaction
+                </button>
+            </div>
+        </div>
+
+        <a href="/dashboard"
+           class="text-sm text-gray-500 hover:underline">
+            ← Back to dashboard
+        </a>
     </div>
 
-    <!-- FILTER BAR -->
-    <div class="flex flex-wrap gap-2">
+    {{-- =========================
+        FILTER BAR
+    ========================== --}}
+    <div class="bg-white border rounded-xl p-4 flex flex-wrap gap-4 items-end">
 
-        <input
-            type="month"
-            wire:model.defer="month"
-            wire:change="refreshLedger"
-            class="border rounded px-3 py-2 text-sm"
-        />
+        {{-- MONTH --}}
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Month</label>
+            <input
+                type="month"
+                wire:model.debounce.500ms="month"
+                class="border rounded px-3 py-2 text-sm w-40"
+            />
+        </div>
 
-        <select
-            wire:model="filterUnitId"
-            wire:change="refreshLedger"
-            class="border rounded px-3 py-2 text-sm"
-        >
-            <option value="">All Units</option>
-            @foreach ($this->units as $unit)
-                <option value="{{ $unit->id }}">
-                    {{ $unit->name }}
-                </option>
-            @endforeach
-        </select>
-
-        <select
-            wire:model="filterTenantId"
-            wire:change="refreshLedger"
-            class="border rounded px-3 py-2 text-sm"
-        >
-            <option value="">All Tenants</option>
-            @foreach ($this->tenants as $tenant)
-                <option value="{{ $tenant->id }}">
-                    {{ $tenant->name }}
-                </option>
-            @endforeach
-        </select>
-
-        @if ($filterUnitId || $filterTenantId)
-            <button
-                wire:click="
-                    $set('filterUnitId', null);
-                    $set('filterTenantId', null);
-                    refreshLedger();
-                "
-                class="text-xs text-gray-500 hover:underline"
+        {{-- UNIT --}}
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Unit</label>
+            <select
+                wire:model="filterUnitId"
+                class="border rounded px-3 py-2 text-sm w-44"
             >
-                Clear filters
+                <option value="">All Units</option>
+                @foreach ($this->units as $unit)
+                    <option value="{{ $unit->id }}">
+                        {{ $unit->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        {{-- TENANT --}}
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Tenant</label>
+            <select
+                wire:model="filterTenantId"
+                class="border rounded px-3 py-2 text-sm w-44"
+            >
+                <option value="">All Tenants</option>
+                @foreach ($this->tenants as $tenant)
+                    <option value="{{ $tenant->id }}">
+                        {{ $tenant->name }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+
+        {{-- CLEAR --}}
+        @if ($month || $filterUnitId || $filterTenantId)
+            <button
+                wire:click="clearFilters"
+                class="text-xs text-gray-500 hover:underline">
+                Reset filters
             </button>
         @endif
     </div>
 
-    <!-- LEDGER TABLE -->
-    <div class="overflow-x-auto bg-white rounded-xl border">
-        <table class="min-w-[900px] w-full text-sm">
-            <thead class="bg-gray-100">
-                <tr>
-                    <th class="px-4 py-2 text-left">Date</th>
-                    <th class="px-4 py-2 text-left">Category</th>
-                    <th class="px-4 py-2 text-left">Note</th>
-                    <th class="px-4 py-2 text-right">Income</th>
-                    <th class="px-4 py-2 text-right">Expense</th>
-                    <th class="px-4 py-2 text-right">Action</th>
-                </tr>
-            </thead>
+    {{-- =========================
+        TRANSACTION LIST
+    ========================== --}}
+    <div class="bg-white border rounded-xl divide-y">
 
-            <tbody>
-                @forelse ($transactions as $t)
-                    <tr class="border-t hover:bg-gray-50">
-                        <!-- DATE -->
-                        <td class="px-4 py-2 text-xs text-gray-500">
-                            {{ $t->transacted_at->format('d M') }}
-                        </td>
+        @forelse ($transactions as $t)
+            <div class="p-4 flex justify-between gap-4">
 
-                        <!-- CATEGORY + BADGES -->
-                        <td class="px-4 py-2">
-                            <div class="flex items-center gap-2 flex-wrap">
-                                <span>{{ $t->category }}</span>
+                {{-- LEFT --}}
+                <div>
+                    <p class="font-medium text-sm">
+                        {{ $t->category }}
 
-                                @if ($t->corrections_count > 0)
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-yellow-100 text-yellow-700">
-                                        Corrected
-                                    </span>
-                                @endif
+                        @if ($t->isCorrection())
+                            <span class="ml-2 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
+                                Correction
+                            </span>
+                        @endif
+                    </p>
 
-                                @if ($t->evidences_count > 0)
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-600">
-                                        Evidence
-                                    </span>
-                                @endif
+                    <p class="text-xs text-gray-500">
+                        {{ $t->transacted_at->format('d M Y') }}
+                        @if ($t->note)
+                            • {{ $t->note }}
+                        @endif
+                    </p>
 
-                                @if ($t->hasUnit())
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700">
-                                        Unit
-                                    </span>
-                                @endif
+                    @if ($t->isCorrection() && $t->original)
+                        <p class="text-xs text-gray-400 mt-1">
+                            Correcting transaction from
+                            {{ $t->original->transacted_at->format('d M Y') }}
+                        </p>
+                    @endif
+                </div>
 
-                                @if ($t->hasTenant())
-                                    <span class="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700">
-                                        Tenant
-                                    </span>
-                                @endif
-                            </div>
-                        </td>
+                {{-- RIGHT --}}
+                <div class="text-right">
+                    <p class="font-semibold
+                        {{ $t->type === 'income' ? 'text-green-600' : 'text-red-600' }}">
+                        {{ $t->type === 'income' ? '+' : '-' }}
+                        Rp {{ number_format($t->amount) }}
+                    </p>
 
-                        <!-- NOTE -->
-                        <td class="px-4 py-2 text-gray-500">
-                            {{ $t->note }}
+                    @if (! $t->isCorrection())
+                        <button
+                            wire:click="openCorrection({{ $t->id }})"
+                            class="text-xs text-blue-600 hover:underline">
+                            Correct
+                        </button>
+                    @endif
+                </div>
 
-                            @if ($t->isCorrection() && $t->original)
-                                <div class="text-xs text-gray-400 mt-1">
-                                    Correction of {{ $t->original->transacted_at->format('d M Y') }}
-                                </div>
-                            @endif
-                        </td>
+            </div>
+        @empty
+            <div class="p-6 text-center text-gray-500 text-sm">
+                No transactions found
+            </div>
+        @endforelse
+    </div>
 
-                        <!-- INCOME -->
-                        <td class="px-4 py-2 text-right text-green-600">
-                            @if ($t->type === 'income')
-                                Rp {{ number_format($t->amount) }}
-                            @endif
-                        </td>
-
-                        <!-- EXPENSE -->
-                        <td class="px-4 py-2 text-right text-red-600">
-                            @if ($t->type === 'expense')
-                                Rp {{ number_format($t->amount) }}
-                            @endif
-                        </td>
-
-                        <!-- ACTION -->
-                        <td class="px-4 py-2 text-right">
-                            @if (!$t->isCorrection())
-                                <button
-                                    wire:click="openCorrection({{ $t->id }})"
-                                    class="text-xs text-blue-600 hover:underline">
-                                    Correct
-                                </button>
-                            @else
-                                <span class="text-xs text-gray-400">
-                                    Correction
-                                </span>
-                            @endif
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="6" class="px-4 py-6 text-center text-gray-500">
-                            No transactions for this month
-                        </td>
-                    </tr>
-                @endforelse
-            </tbody>
-        </table>
+    {{-- PAGINATION --}}
+    <div>
+        {{ $transactions->links() }}
     </div>
 
     {{-- =========================
-        CORRECTION MODAL
+        ADD TRANSACTION MODAL
     ========================== --}}
-    @if ($showCorrectionModal)
+    @if ($showTransactionModal)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div class="bg-white w-full max-w-md rounded-xl shadow-lg p-5 space-y-4">
+            <div class="bg-white w-full max-w-lg rounded-xl p-6 space-y-4">
 
                 <h2 class="text-lg font-semibold">
-                    Correct Transaction
+                    Add Transaction
                 </h2>
 
-                <p class="text-sm text-gray-600">
-                    This will create a new transaction to correct the selected one.
-                </p>
-
-                @if ($correctionTarget)
-                    <div class="rounded-lg border bg-gray-50 p-3 text-sm space-y-1">
-                        <p class="text-xs text-gray-500 uppercase tracking-wide">
-                            Original Transaction
-                        </p>
-
-                        <div class="flex justify-between">
-                            <span class="text-gray-600">Date</span>
-                            <span>{{ $correctionTarget->transacted_at->format('d M Y') }}</span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span class="text-gray-600">Type</span>
-                            <span class="{{ $correctionTarget->type === 'income' ? 'text-green-600' : 'text-red-600' }}">
-                                {{ strtoupper($correctionTarget->type) }}
-                            </span>
-                        </div>
-
-                        <div class="flex justify-between">
-                            <span class="text-gray-600">Category</span>
-                            <span>{{ $correctionTarget->category }}</span>
-                        </div>
-
-                        <div class="flex justify-between font-medium">
-                            <span class="text-gray-600">Amount</span>
-                            <span>Rp {{ number_format($correctionTarget->amount) }}</span>
-                        </div>
-
-                        @if ($correctionTarget->note)
-                            <div class="pt-1 text-xs text-gray-500">
-                                Note: {{ $correctionTarget->note }}
-                            </div>
-                        @endif
-                    </div>
-                @endif
-
-                <div class="space-y-3">
-                    <div>
-                        <label class="text-sm text-gray-600">
-                            Correction amount
-                        </label>
-                        <input
-                            type="number"
-                            wire:model="correctionAmount"
-                            min="1"
-                            class="w-full border rounded px-3 py-2 text-sm"
-                        />
-                        @error('correctionAmount')
-                            <p class="text-xs text-red-500">{{ $message }}</p>
-                        @enderror
-                    </div>
-
-                    <div>
-                        <label class="text-sm text-gray-600">
-                            Reason (required)
-                        </label>
-                        <textarea
-                            wire:model="correctionNote"
-                            rows="3"
-                            class="w-full border rounded px-3 py-2 text-sm"
-                            placeholder="Explain why this correction is needed"
-                        ></textarea>
-                        @error('correctionNote')
-                            <p class="text-xs text-red-500">{{ $message }}</p>
-                        @enderror
-                    </div>
+                {{-- TYPE --}}
+                <div>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Type
+                    </label>
+                    <select
+                        wire:model="txType"
+                        class="w-full border rounded px-3 py-2 text-sm"
+                    >
+                        <option value="expense">Expense</option>
+                        <option value="income">Income</option>
+                    </select>
                 </div>
 
-                <div class="flex justify-end gap-2 pt-2">
+                {{-- CATEGORY --}}
+                <div>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Category
+                    </label>
+                    <input
+                        wire:model.defer="txCategory"
+                        class="w-full border rounded px-3 py-2 text-sm"
+                        placeholder="e.g. Electricity, Rent, Maintenance"
+                    />
+                </div>
+
+                {{-- AMOUNT --}}
+                <div>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Amount
+                    </label>
+                    <input
+                        wire:model.defer="txAmount"
+                        type="number"
+                        class="w-full border rounded px-3 py-2 text-sm"
+                        placeholder="e.g. 1500000"
+                    />
+                </div>
+
+                {{-- DATE --}}
+                <div>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Date
+                    </label>
+                    <input
+                        wire:model.defer="txDate"
+                        type="date"
+                        class="w-full border rounded px-3 py-2 text-sm"
+                    />
+                </div>
+
+                {{-- NOTE --}}
+                <div>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Note
+                    </label>
+                    <textarea
+                        wire:model.defer="txNote"
+                        rows="2"
+                        class="w-full border rounded px-3 py-2 text-sm"
+                        placeholder="Optional note"
+                    ></textarea>
+                </div>
+
+                {{-- ACTION --}}
+                <div class="flex justify-end gap-2 pt-4">
                     <button
-                        wire:click="closeCorrection"
-                        class="px-3 py-2 text-sm text-gray-600">
+                        wire:click="closeTransactionModal"
+                        class="text-sm text-gray-600">
                         Cancel
                     </button>
 
                     <button
-                        wire:click="submitCorrection"
-                        class="px-4 py-2 text-sm bg-gray-900 text-white rounded">
-                        Confirm correction
+                        wire:click="saveTransaction"
+                        class="px-4 py-2 bg-gray-900 text-white text-sm rounded">
+                        Save
                     </button>
                 </div>
+
             </div>
         </div>
     @endif

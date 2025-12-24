@@ -3,52 +3,71 @@
 namespace App\Livewire;
 
 use Livewire\Component;
+use App\Models\Unit;
+use App\Models\RentCycle;
 use App\Models\Transaction;
 use App\Models\RentBilling;
 use Carbon\Carbon;
 
 class Dashboard extends Component
 {
-    // ===== Dashboard State =====
+    /* =========================
+        Dashboard State
+    ========================== */
     public array $summary = [];
     public array $transactions = [];
     public array $incomeByCategory = [];
     public array $expenseByCategory = [];
 
-    // ===== Rent Reminder State =====
+    /* =========================
+        Unit Occupancy
+    ========================== */
+    public array $unitStats = [
+        'occupied' => 0,
+        'available' => 0,
+        'inactive' => 0,
+        'total_active' => 0,
+    ];
+
+    /* =========================
+        Rent Reminder
+    ========================== */
     public array $rentAlerts = [];
     public int $overdueCount = 0;
 
-    // ===== Form State =====
+    /* =========================
+        Form State
+    ========================== */
     public string $type = 'income';
     public string $category = '';
     public int $amount = 0;
     public string $transacted_at = '';
     public ?string $note = null;
 
-    // ===== Date Range State =====
+    /* =========================
+        Date Range (FOR SUMMARY ONLY)
+    ========================== */
     public string $range = 'this_month';
 
     /* =========================
-       Lifecycle
+        Lifecycle
     ========================== */
-
-    public function mount()
+    public function mount(): void
     {
+        $this->transacted_at = now()->toDateString();
         $this->loadData();
     }
 
     /* =========================
-       Public Actions
+        Actions
     ========================== */
-
-    public function changeRange(string $range)
+    public function changeRange(string $range): void
     {
         $this->range = $range;
         $this->loadData();
     }
 
-    public function addTransaction()
+    public function addTransaction(): void
     {
         $this->validate([
             'type' => 'required|in:income,expense',
@@ -62,7 +81,7 @@ class Dashboard extends Component
             'type' => $this->type,
             'category' => $this->category,
             'amount' => $this->amount,
-            'transacted_at' => $this->transacted_at,
+            'transacted_at' => Carbon::parse($this->transacted_at),
             'note' => $this->note,
         ]);
 
@@ -71,9 +90,8 @@ class Dashboard extends Component
     }
 
     /* =========================
-       Core Logic
+        Core Logic
     ========================== */
-
     protected function getDateRange(): array
     {
         if ($this->range === 'last_month') {
@@ -89,17 +107,18 @@ class Dashboard extends Component
         ];
     }
 
-    protected function loadData()
+    protected function loadData(): void
     {
         [$start, $end] = $this->getDateRange();
 
-        /* ===== TRANSACTIONS BASE ===== */
-        $baseQuery = Transaction::query()
+        /* =========================
+            SUMMARY (RANGE-BASED)
+        ========================== */
+        $summaryQuery = Transaction::query()
             ->whereBetween('transacted_at', [$start, $end]);
 
-        /* ===== SUMMARY ===== */
-        $income = (clone $baseQuery)->where('type', 'income')->sum('amount');
-        $expense = (clone $baseQuery)->where('type', 'expense')->sum('amount');
+        $income = (clone $summaryQuery)->where('type', 'income')->sum('amount');
+        $expense = (clone $summaryQuery)->where('type', 'expense')->sum('amount');
 
         $this->summary = [
             'income' => $income,
@@ -107,22 +126,28 @@ class Dashboard extends Component
             'balance' => $income - $expense,
         ];
 
-        /* ===== RECENT TRANSACTIONS ===== */
-        $this->transactions = (clone $baseQuery)
+        /* =========================
+            RECENT ACTIVITY (GLOBAL)
+        ========================== */
+        $this->transactions = Transaction::query()
             ->orderByDesc('transacted_at')
-            ->limit(10)
+            ->limit(7)
             ->get()
-            ->map(fn ($t) => [
-                'date' => $t->transacted_at->format('Y-m-d'),
+            ->map(fn (Transaction $t) => [
+                'date' => $t->transacted_at->diffForHumans(),
                 'type' => $t->type,
-                'category' => $t->category,
+                'category' => $t->category === 'Rent'
+                    ? 'Rent Payment'
+                    : $t->category,
                 'amount' => $t->amount,
                 'note' => $t->note,
             ])
             ->toArray();
 
-        /* ===== CATEGORY BREAKDOWN ===== */
-        $this->incomeByCategory = (clone $baseQuery)
+        /* =========================
+            CATEGORY BREAKDOWN (RANGE)
+        ========================== */
+        $this->incomeByCategory = (clone $summaryQuery)
             ->where('type', 'income')
             ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
@@ -130,7 +155,7 @@ class Dashboard extends Component
             ->get()
             ->toArray();
 
-        $this->expenseByCategory = (clone $baseQuery)
+        $this->expenseByCategory = (clone $summaryQuery)
             ->where('type', 'expense')
             ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
@@ -138,22 +163,45 @@ class Dashboard extends Component
             ->get()
             ->toArray();
 
-        /* ===== RENT BILLING ALERTS (INVOICE-BASED) ===== */
+        /* =========================
+            UNIT OCCUPANCY (SOURCE OF TRUTH)
+        ========================== */
+        $totalActiveUnits = Unit::where('is_active', true)->count();
+
+        $occupiedUnits = RentCycle::query()
+            ->whereNull('end_date')
+            ->distinct('unit_id')
+            ->count('unit_id');
+
+        $this->unitStats = [
+            'occupied' => $occupiedUnits,
+            'available' => max(0, $totalActiveUnits - $occupiedUnits),
+            'inactive' => Unit::where('is_active', false)->count(),
+            'total_active' => $totalActiveUnits,
+        ];
+
+        /* =========================
+            RENT ALERTS (GLOBAL)
+        ========================== */
         $billings = RentBilling::query()
             ->whereNull('paid_at')
-            ->with(['rentCycle.tenant', 'rentCycle.unit'])
+            ->with([
+                'rentCycle.tenant' => fn ($q) => $q->withTrashed(),
+                'rentCycle.unit' => fn ($q) => $q->withTrashed(),
+            ])
             ->orderBy('due_date')
             ->get();
 
-        $this->rentAlerts = $billings->map(function ($bill) {
-            return [
-                'tenant' => $bill->rentCycle->tenant->name,
-                'unit' => $bill->rentCycle->unit->name,
+        $this->rentAlerts = $billings
+            ->take(5)
+            ->map(fn (RentBilling $bill) => [
+                'tenant' => optional($bill->rentCycle->tenant)->name ?? '[Deleted Tenant]',
+                'unit' => optional($bill->rentCycle->unit)->name ?? '[Deleted Unit]',
                 'amount' => $bill->amount,
                 'due_date' => $bill->due_date,
-                'label' => $bill->reminderLabel(), // H-7, H-6, ..., H, OVERDUE
-            ];
-        })->toArray();
+                'label' => $bill->reminderLabel(),
+            ])
+            ->toArray();
 
         $this->overdueCount = $billings
             ->filter(fn ($b) => $b->reminderLabel() === 'OVERDUE')
