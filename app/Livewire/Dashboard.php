@@ -4,8 +4,8 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use App\Models\Transaction;
+use App\Models\RentBilling;
 use Carbon\Carbon;
-use App\Services\RentBillingService;
 
 class Dashboard extends Component
 {
@@ -15,13 +15,16 @@ class Dashboard extends Component
     public array $incomeByCategory = [];
     public array $expenseByCategory = [];
 
+    // ===== Rent Reminder State =====
+    public array $rentAlerts = [];
+    public int $overdueCount = 0;
+
     // ===== Form State =====
     public string $type = 'income';
     public string $category = '';
     public int $amount = 0;
     public string $transacted_at = '';
     public ?string $note = null;
-    public int $unpaidCount = 0;
 
     // ===== Date Range State =====
     public string $range = 'this_month';
@@ -32,7 +35,6 @@ class Dashboard extends Component
 
     public function mount()
     {
-        // INIT ONCE
         $this->loadData();
     }
 
@@ -62,12 +64,9 @@ class Dashboard extends Component
             'amount' => $this->amount,
             'transacted_at' => $this->transacted_at,
             'note' => $this->note,
-        ]);        
+        ]);
 
-        // reset input (ledger = append-only)
         $this->reset(['category', 'amount', 'note']);
-
-        // refresh dashboard
         $this->loadData();
     }
 
@@ -79,15 +78,14 @@ class Dashboard extends Component
     {
         if ($this->range === 'last_month') {
             return [
-                Carbon::now()->subMonth()->startOfMonth(),
-                Carbon::now()->subMonth()->endOfMonth(),
+                now()->subMonth()->startOfMonth(),
+                now()->subMonth()->endOfMonth(),
             ];
         }
 
-        // default: this month
         return [
-            Carbon::now()->startOfMonth(),
-            Carbon::now()->endOfMonth(),
+            now()->startOfMonth(),
+            now()->endOfMonth(),
         ];
     }
 
@@ -95,17 +93,13 @@ class Dashboard extends Component
     {
         [$start, $end] = $this->getDateRange();
 
+        /* ===== TRANSACTIONS BASE ===== */
         $baseQuery = Transaction::query()
             ->whereBetween('transacted_at', [$start, $end]);
 
-        // ---- SUMMARY ----
-        $income = (clone $baseQuery)
-            ->where('type', 'income')
-            ->sum('amount');
-
-        $expense = (clone $baseQuery)
-            ->where('type', 'expense')
-            ->sum('amount');
+        /* ===== SUMMARY ===== */
+        $income = (clone $baseQuery)->where('type', 'income')->sum('amount');
+        $expense = (clone $baseQuery)->where('type', 'expense')->sum('amount');
 
         $this->summary = [
             'income' => $income,
@@ -113,7 +107,7 @@ class Dashboard extends Component
             'balance' => $income - $expense,
         ];
 
-        // ---- RECENT TRANSACTIONS ----
+        /* ===== RECENT TRANSACTIONS ===== */
         $this->transactions = (clone $baseQuery)
             ->orderByDesc('transacted_at')
             ->limit(10)
@@ -127,47 +121,48 @@ class Dashboard extends Component
             ])
             ->toArray();
 
-        // ---- INCOME BY CATEGORY ----
+        /* ===== CATEGORY BREAKDOWN ===== */
         $this->incomeByCategory = (clone $baseQuery)
             ->where('type', 'income')
             ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
             ->orderByDesc('total')
             ->get()
-            ->map(fn ($r) => [
-                'category' => $r->category,
-                'total' => $r->total,
-            ])
             ->toArray();
 
-        // ---- EXPENSE BY CATEGORY ----
         $this->expenseByCategory = (clone $baseQuery)
             ->where('type', 'expense')
             ->selectRaw('category, SUM(amount) as total')
             ->groupBy('category')
             ->orderByDesc('total')
             ->get()
-            ->map(fn ($r) => [
-                'category' => $r->category,
-                'total' => $r->total,
-            ])
             ->toArray();
 
-        // ===== UNPAID COUNT =====
-        $billing = app(RentBillingService::class);
+        /* ===== RENT BILLING ALERTS (INVOICE-BASED) ===== */
+        $billings = RentBilling::query()
+            ->whereNull('paid_at')
+            ->with(['rentCycle.tenant', 'rentCycle.unit'])
+            ->orderBy('due_date')
+            ->get();
 
-        $this->unpaidCount = $billing
-            ->unpaidSummaryForMonth(Carbon::now())
+        $this->rentAlerts = $billings->map(function ($bill) {
+            return [
+                'tenant' => $bill->rentCycle->tenant->name,
+                'unit' => $bill->rentCycle->unit->name,
+                'amount' => $bill->amount,
+                'due_date' => $bill->due_date,
+                'label' => $bill->reminderLabel(), // H-7, H-6, ..., H, OVERDUE
+            ];
+        })->toArray();
+
+        $this->overdueCount = $billings
+            ->filter(fn ($b) => $b->reminderLabel() === 'OVERDUE')
             ->count();
     }
-
-    /* =========================
-       Render
-    ========================== */
 
     public function render()
     {
         return view('livewire.dashboard')
-        ->layout('layouts.dashboard');
+            ->layout('layouts.dashboard');
     }
 }

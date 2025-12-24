@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RentCycle extends Model
 {
@@ -30,9 +31,16 @@ class RentCycle extends Model
     {
         return $this->belongsTo(Tenant::class);
     }
-
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class);
+    }
     public function isActive(): bool
     {
         return is_null($this->end_date);
+    }
+    public function billings()
+    {
+        return $this->hasMany(RentBilling::class);
     }
 }

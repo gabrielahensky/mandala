@@ -9,7 +9,13 @@ class Unit extends Model
     protected $fillable = [
         'name',
         'note',
+        'base_price',
+        'facilities',
         'is_active',
+    ];
+    protected $casts = [
+        'facilities' => 'array',
+        'is_active' => 'boolean',
     ];
 
     public function rentCycles()

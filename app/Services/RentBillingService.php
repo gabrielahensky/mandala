@@ -8,9 +8,9 @@ use Carbon\Carbon;
 
 class RentBillingService
 {
-    /* =========================
-        MONTHLY (STRICT)
-       ========================= */
+    /* ======================================================
+        MONTHLY (STRICT) — C6.3
+       ====================================================== */
 
     protected function expectedForMonth(RentCycle $rent, Carbon $month): int
     {
@@ -18,7 +18,7 @@ class RentBillingService
             return 0;
         }
 
-        $start = Carbon::parse($rent->start_date)->startOfMonth();
+        $start  = Carbon::parse($rent->start_date)->startOfMonth();
         $target = $month->copy()->startOfMonth();
 
         // belum mulai sewa
@@ -40,7 +40,7 @@ class RentBillingService
                 'transacted_at',
                 [
                     $month->copy()->startOfMonth(),
-                    $month->copy()->endOfMonth()
+                    $month->copy()->endOfMonth(),
                 ]
             )
             ->sum('amount');
@@ -55,14 +55,39 @@ class RentBillingService
             'expected'    => $expected,
             'paid'        => $paid,
             'outstanding' => max(0, $expected - $paid),
-            'overpaid'    => max(0, $paid - $expected),
             'status'      => $paid >= $expected ? 'paid' : 'unpaid',
         ];
     }
 
-    /* =========================
-        CARRY / HISTORICAL
-       ========================= */
+    /* ======================================================
+        WHO HASN’T PAID — C6.3 OUTPUT
+       ====================================================== */
+
+    public function unpaidRentsForMonth(Carbon $month)
+    {
+        return RentCycle::query()
+            ->whereNull('end_date')
+            ->with(['unit', 'tenant'])
+            ->get()
+            ->map(function ($rent) use ($month) {
+                $summary = $this->summaryForMonth($rent, $month);
+
+                return [
+                    'rent'        => $rent,
+                    'unit'        => $rent->unit,
+                    'tenant'      => $rent->tenant,
+                    'expected'    => $summary['expected'],
+                    'paid'        => $summary['paid'],
+                    'outstanding' => $summary['outstanding'],
+                ];
+            })
+            ->filter(fn ($row) => $row['outstanding'] > 0)
+            ->values();
+    }
+
+    /* ======================================================
+        CARRY / HISTORICAL — C6.5
+       ====================================================== */
 
     protected function totalPaidUntil(RentCycle $rent, Carbon $month): int
     {
@@ -71,7 +96,11 @@ class RentBillingService
             ->where('category', 'Rent')
             ->forTenant($rent->tenant_id)
             ->forUnit($rent->unit_id)
-            ->whereDate('transacted_at', '<=', $month->copy()->endOfMonth())
+            ->whereDate(
+                'transacted_at',
+                '<=',
+                $month->copy()->endOfMonth()
+            )
             ->sum('amount');
     }
 
@@ -107,69 +136,5 @@ class RentBillingService
             'debt'           => max(0, -$balance),
             'status'         => $balance >= 0 ? 'paid' : 'unpaid',
         ];
-    }
-
-    /* =========================
-        WHO HASN’T PAID (MONTHLY)
-       ========================= */
-    public function unpaidRentsForMonth(Carbon $month)
-    {
-        return RentCycle::query()
-            ->whereNull('end_date')
-            ->with(['unit', 'tenant'])
-            ->get()
-            ->map(function ($rent) use ($month) {
-                $expected = $rent->monthly_rent ?? 0;
-       
-                $paid = Transaction::query()
-                    ->where('type', 'income')
-                    ->where('category', 'Rent')
-                    ->forTenant($rent->tenant_id)
-                    ->forUnit($rent->unit_id)
-                    ->whereBetween(
-                        'transacted_at',
-                        [$month->copy()->startOfMonth(), $month->copy()->endOfMonth()]
-                    )
-                    ->sum('amount');
-       
-                $outstanding = max(0, $expected - $paid);
-       
-                return [
-                    'rent_id'     => $rent->id,
-                    'unit'        => $rent->unit,
-                    'tenant'      => $rent->tenant,
-                    'expected'    => $expected,
-                    'paid'        => $paid,
-                    'outstanding' => $outstanding,
-                ];
-            })
-            ->filter(fn ($row) => $row['outstanding'] > 0)
-            ->values();
-    }       
-       
-    public function unpaidSummaryForMonth(Carbon $month)
-    {
-        return RentCycle::query()
-            ->whereNull('end_date')
-            ->with(['unit', 'tenant'])
-            ->get()
-            ->map(function ($rent) use ($month) {
-                $monthly = $this->summaryForMonth($rent, $month);
-
-                if ($monthly['status'] !== 'unpaid') {
-                    return null;
-                }
-
-                return [
-                    'rent_id'     => $rent->id,
-                    'unit'        => $rent->unit->name,
-                    'tenant'      => $rent->tenant->name,
-                    'expected'    => $monthly['expected'],
-                    'paid'        => $monthly['paid'],
-                    'outstanding' => $monthly['outstanding'],
-                ];
-            })
-            ->filter()
-            ->values();
     }
 }

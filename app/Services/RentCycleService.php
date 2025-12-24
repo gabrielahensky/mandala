@@ -11,54 +11,72 @@ use Illuminate\Validation\ValidationException;
 class RentCycleService
 {
     /**
-     * Start new rent cycle
+     * Start a new rent cycle
      */
     public function startRent(
         Unit $unit,
         Tenant $tenant,
-        Carbon|string $startDate = null,
+        Carbon|string|null $startDate = null,
         ?int $monthlyRent = null,
         ?string $note = null
     ): RentCycle {
-        // normalize date
         $startDate = $startDate
             ? Carbon::parse($startDate)
             : now();
 
-        // RULE 1: unit must be free
+        // RULE: unit must be free
         if ($unit->activeRent) {
             throw ValidationException::withMessages([
                 'unit' => 'Unit is already occupied.',
             ]);
         }
 
-        // RULE 2: tenant must not have active rent
+        // RULE: tenant must not have active rent
         if ($tenant->activeRent) {
             throw ValidationException::withMessages([
                 'tenant' => 'Tenant already has an active rent.',
             ]);
         }
 
-        return RentCycle::create([
-            'unit_id' => $unit->id,
-            'tenant_id' => $tenant->id,
-            'start_date' => $startDate,
-            'monthly_rent' => $monthlyRent,
-            'note' => $note,
+        // SNAPSHOT PRICE
+        $finalMonthlyRent = $monthlyRent ?? $unit->base_price;
+
+        if ($finalMonthlyRent === null) {
+            throw ValidationException::withMessages([
+                'monthly_rent' => 'Monthly rent cannot be null.',
+            ]);
+        }
+
+        // CREATE RENT CYCLE
+        $rent = RentCycle::create([
+            'unit_id'      => $unit->id,
+            'tenant_id'    => $tenant->id,
+            'start_date'   => $startDate,
+            'monthly_rent' => $finalMonthlyRent,
+            'note'         => $note,
         ]);
+
+        // CREATE FIRST INVOICE (MONTH OF START)
+        app(RentInvoiceService::class)
+            ->generateForRent(
+                $rent,
+                $startDate->copy()->startOfMonth()
+            );
+
+        return $rent;
     }
 
     /**
-     * End active rent cycle
+     * End rent cycle safely
      */
-    public function endRent(
-        RentCycle $rentCycle,
-        Carbon|string $endDate = null,
+    public function endRentSafely(
+        RentCycle $rent,
+        Carbon|string|null $endDate = null,
         ?string $note = null
     ): RentCycle {
-        if (!$rentCycle->isActive()) {
+        if (! $rent->isActive()) {
             throw ValidationException::withMessages([
-                'rent' => 'Rent cycle is already ended.',
+                'rent' => 'Rent cycle already ended.',
             ]);
         }
 
@@ -66,20 +84,31 @@ class RentCycleService
             ? Carbon::parse($endDate)
             : now();
 
-        // LOGICAL SAFETY
-        if ($endDate->lt($rentCycle->start_date)) {
+        // SAFETY: cannot end before start
+        if ($endDate->lt($rent->start_date)) {
             throw ValidationException::withMessages([
                 'end_date' => 'End date cannot be before start date.',
             ]);
         }
 
-        $rentCycle->update([
+        // SAFETY: no unpaid invoices
+        $hasUnpaidInvoices = $rent->billings()
+            ->where('status', '!=', 'paid')
+            ->exists();
+
+        if ($hasUnpaidInvoices) {
+            throw ValidationException::withMessages([
+                'rent' => 'Cannot end rent while unpaid invoices exist.',
+            ]);
+        }
+
+        $rent->update([
             'end_date' => $endDate,
             'note' => $note
-                ? trim(($rentCycle->note ?? '') . "\nEnd: " . $note)
-                : $rentCycle->note,
+                ? trim(($rent->note ?? '') . "\nEnd: " . $note)
+                : $rent->note,
         ]);
 
-        return $rentCycle;
+        return $rent;
     }
 }

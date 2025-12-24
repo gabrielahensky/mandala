@@ -1,33 +1,15 @@
 <div class="px-6 py-6 space-y-10">
 
     {{-- HEADER --}}
-    <div class="flex items-center justify-between">
+    <div class="flex items-start justify-between gap-4">
         <div>
             <h1 class="text-2xl font-bold">
                 Dashboard
             </h1>
             <p class="text-sm text-gray-500">
-                Overview of your finances & rental status
+                Financial overview & active rent monitoring
             </p>
         </div>
-
-        @if ($unpaidCount > 0)
-        <section class="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between">
-            <div>
-                <p class="font-semibold text-red-700">
-                    {{ $unpaidCount }} tenant belum membayar sewa
-                </p>
-                <p class="text-sm text-red-600">
-                    Segera cek untuk menghindari tunggakan
-                </p>
-            </div>
-
-            <a href="/rent/unpaid"
-            class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700">
-                Lihat Detail
-            </a>
-        </section>
-        @endif
 
         {{-- RANGE --}}
         <div class="flex gap-1 bg-gray-200 p-1 rounded-lg">
@@ -50,6 +32,18 @@
             </button>
         </div>
     </div>
+
+    {{-- OVERDUE ALERT --}}
+    @if ($overdueCount > 0)
+        <section class="bg-red-50 border border-red-200 rounded-xl p-4">
+            <p class="font-semibold text-red-700">
+                {{ $overdueCount }} rent invoice overdue
+            </p>
+            <p class="text-sm text-red-600">
+                Immediate action required to prevent accumulation
+            </p>
+        </section>
+    @endif
 
     {{-- HEALTH SNAPSHOT --}}
     <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -77,21 +71,58 @@
 
     </section>
 
-    {{-- ACTION / ALERT --}}
-    <section class="bg-white rounded-xl border p-5 flex items-center justify-between">
+    {{-- RENT ATTENTION LOG --}}
+    <section class="bg-white rounded-xl border p-5 space-y-4">
         <div>
-            <p class="font-semibold">
-                Rent Attention Needed
-            </p>
+            <h2 class="text-lg font-semibold">
+                Rent Attention Log
+            </h2>
             <p class="text-sm text-gray-500">
-                Check tenants who haven’t paid rent yet
+                Upcoming, due, and overdue rent invoices
             </p>
         </div>
 
-        <a href="/rent/unpaid"
-           class="px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700">
-            View Unpaid Rent
-        </a>
+        @forelse ($rentAlerts as $alert)
+            <div class="flex items-center justify-between border rounded-lg p-3">
+
+                <div>
+                    <p class="font-medium">
+                        {{ $alert['tenant'] }} — {{ $alert['unit'] }}
+                    </p>
+                    <p class="text-sm text-gray-500">
+                        Due {{ \Carbon\Carbon::parse($alert['due_date'])->format('d M Y') }}
+                        · Rp {{ number_format($alert['amount']) }}
+                    </p>
+                </div>
+
+                @if ($alert['label'])
+                    <span
+                        class="px-3 py-1 text-xs font-semibold rounded
+                        @class([
+                            'bg-gray-100 text-gray-600' =>
+                                str_starts_with($alert['label'], 'H-')
+                                && (int) substr($alert['label'], 2) >= 5,
+
+                            'bg-yellow-100 text-yellow-700' =>
+                                str_starts_with($alert['label'], 'H-')
+                                && (int) substr($alert['label'], 2) <= 4,
+
+                            'bg-orange-100 text-orange-700' =>
+                                $alert['label'] === 'H',
+
+                            'bg-red-100 text-red-700' =>
+                                $alert['label'] === 'OVERDUE',
+                        ])">
+                        {{ $alert['label'] }}
+                    </span>
+                @endif
+
+            </div>
+        @empty
+            <p class="text-sm text-gray-500">
+                All rent invoices are under control 🎉
+            </p>
+        @endforelse
     </section>
 
     {{-- RECENT TRANSACTIONS --}}

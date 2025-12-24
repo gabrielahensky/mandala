@@ -21,12 +21,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        view()->composer('layouts.dashboard', function ($view) {
+        view()->composer('*', function ($view) {
             $billing = app(RentBillingService::class);
     
             $view->with(
                 'unpaidCount',
-                $billing->unpaidSummaryForMonth(Carbon::now())->count()
+                $billing
+                    ->unpaidRentsForMonth(Carbon::now())
+                    ->count()
             );
         });
     }

@@ -16,7 +16,7 @@ class RentUnpaid extends Component
     public function mount(RentBillingService $billing)
     {
         $this->billing = $billing;
-        $this->month = now()->format('Y-m');
+        $this->month   = now()->format('Y-m');
 
         $this->load();
     }

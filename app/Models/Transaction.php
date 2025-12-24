@@ -17,6 +17,9 @@ class Transaction extends Model
         'note',
         'transacted_at',
         'correction_of',
+        'rent_cycle_id',
+        'tenant_id',
+        'unit_id',
     ];
 
     protected $casts = [
@@ -112,12 +115,15 @@ class Transaction extends Model
               ->where('reference_id', $unitId);
         });
     }
-
     public function scopeForTenant(Builder $query, int $tenantId): Builder
     {
         return $query->whereHas('tags', function ($q) use ($tenantId) {
             $q->where('type', 'tenant')
               ->where('reference_id', $tenantId);
         });
+    }
+    public function rentCycle(): BelongsTo
+    {
+        return $this->belongsTo(RentCycle::class);
     }
 }

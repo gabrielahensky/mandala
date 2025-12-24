@@ -36,28 +36,32 @@
                 </p>
 
                 <a href="/"
-                   class="block px-3 py-2 rounded
-                   {{ request()->is('/') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                class="block px-3 py-2 rounded
+                {{ request()->is('/') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800/50' }}">
                     Dashboard
                 </a>
 
                 <a href="/ledger"
-                   class="block px-3 py-2 rounded
-                   {{ request()->is('ledger*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                class="block px-3 py-2 rounded
+                {{ request()->is('ledger*') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white hover:bg-gray-800/50' }}">
                     Ledger
                 </a>
 
                 <a href="/rent/unpaid"
-                    class="flex items-center justify-between px-3 py-2 rounded
-                            {{ request()->is('rent/unpaid') ? 'bg-gray-800 text-white' : 'text-gray-400 hover:text-white' }}">
+                class="flex items-center justify-between px-3 py-2 rounded
+                {{ request()->is('rent/unpaid')
+                        ? 'bg-gray-800 text-white'
+                        : ($unpaidCount > 0
+                            ? 'text-red-300 hover:text-white hover:bg-red-900/30'
+                            : 'text-gray-400 hover:text-white hover:bg-gray-800/50') }}">
 
-                        <span>Unpaid Rent</span>
+                    <span>Unpaid Rent</span>
 
-                        @if ($unpaidCount > 0)
-                            <span class="px-2 py-0.5 text-xs bg-red-600 text-white rounded-full">
-                                {{ $unpaidCount }}
-                            </span>
-                        @endif
+                    @if ($unpaidCount > 0)
+                        <span class="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 text-xs font-semibold bg-red-600 text-white rounded-full">
+                            {{ $unpaidCount }}
+                        </span>
+                    @endif
                 </a>
             </div>
 

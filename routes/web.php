@@ -5,6 +5,7 @@ use App\Livewire\Dashboard;
 use App\Livewire\Ledger;
 use App\Livewire\Units;
 use App\Livewire\Tenants;
+use App\Livewire\TenantDetail;
 use App\Livewire\UnitDetail;
 use App\Livewire\RentUnpaid;
 
@@ -15,6 +16,8 @@ Route::get('/tenants', Tenants::class)->name('tenants');
 
 Route::get('/units/{unit}', UnitDetail::class)
     ->name('units.show');
+
+Route::get('/tenants/{tenant}', TenantDetail::class);
 
 Route::get('/rent/unpaid', RentUnpaid::class)
     ->name('rent.unpaid');
