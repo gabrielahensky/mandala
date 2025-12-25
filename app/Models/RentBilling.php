@@ -1,12 +1,17 @@
 <?php
 
 namespace App\Models;
-use Carbon\Carbon;
 
+use App\Events\RentBillingPaid;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 class RentBilling extends Model
 {
+    /* ======================================================
+        CONFIG
+    ======================================================= */
+
     protected $fillable = [
         'rent_cycle_id',
         'billing_month',
@@ -18,39 +23,59 @@ class RentBilling extends Model
 
     protected $casts = [
         'billing_month' => 'date',
-        'due_date' => 'date',
-        'paid_at' => 'date',
+        'due_date'      => 'date',
+        'paid_at'       => 'datetime',
     ];
+
+    /* ======================================================
+        RELATIONS
+    ======================================================= */
 
     public function rentCycle()
     {
         return $this->belongsTo(RentCycle::class);
     }
 
-    public function markPaid(Carbon|string|null $paidAt = null): void
-    {
-        $this->update([
-            'status'  => 'paid',
-            'paid_at' => $paidAt ? Carbon::parse($paidAt) : now(),
-        ]);
-    }
+    /* ======================================================
+        DOMAIN STATE
+    ======================================================= */
 
     public function isPaid(): bool
     {
         return $this->paid_at !== null;
     }
 
+    /* ======================================================
+        DOMAIN ACTIONS (IDEMPOTENT)
+    ======================================================= */
+
+    public function markPaid(Carbon|string|null $paidAt = null): void
+    {
+        if ($this->isPaid()) {
+            return; // 🔐 aman dipanggil berkali-kali
+        }
+
+        $this->update([
+            'paid_at' => $paidAt ? Carbon::parse($paidAt) : now(),
+        ]);
+
+        event(new RentBillingPaid($this));
+    }
+
+    /* ======================================================
+        REMINDER LOGIC
+    ======================================================= */
+
     public function daysLeft(): int
     {
-        return now()->startOfDay()->diffInDays(
-            $this->due_date,
-            false // allow negative
-        );
+        return now()
+            ->startOfDay()
+            ->diffInDays($this->due_date, false);
     }
 
     public function reminderLabel(): ?string
     {
-        if ($this->paid_at) {
+        if ($this->isPaid()) {
             return null;
         }
 
@@ -61,13 +86,13 @@ class RentBilling extends Model
         }
 
         if ($days === 0) {
-            return 'H';
+            return 'Today';
         }
 
         if ($days <= 7) {
             return 'H-' . $days;
         }
 
-        return null; // masih jauh, gak perlu ditampilkan
+        return null;
     }
 }

@@ -4,7 +4,9 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use Livewire\WithPagination;
+use Illuminate\Support\Facades\DB;
 use App\Models\Transaction;
+use App\Models\TransactionTag;
 use App\Services\TransactionService;
 use Illuminate\Validation\ValidationException;
 
@@ -15,9 +17,9 @@ class Ledger extends Component
     protected $paginationTheme = 'tailwind';
 
     /* ======================================================
-        FILTER STATE
+        FILTER STATE (REALTIME)
     ======================================================= */
-    public ?string $month = null; // YYYY-MM
+    public ?string $month = null;        // YYYY-MM
     public ?int $filterUnitId = null;
     public ?int $filterTenantId = null;
 
@@ -26,23 +28,23 @@ class Ledger extends Component
     ======================================================= */
     public bool $showTransactionModal = false;
 
-    public string $txType = 'expense'; // income | expense
+    public string $txType = 'expense';
     public string $txCategory = '';
-    public int $txAmount = 0;
+    public int    $txAmount = 0;
     public string $txDate;
+    public string $txNote = '';
 
+    // DOMAIN SCOPE
     public string $txScope = 'global'; // global | unit | tenant
     public ?int $txUnitId = null;
     public ?int $txTenantId = null;
-
-    public string $txNote = '';
 
     /* ======================================================
         CORRECTION MODAL
     ======================================================= */
     public bool $showCorrectionModal = false;
-    public ?int $correctionTargetId = null;
     public ?Transaction $correctionTarget = null;
+    public ?int $correctionTargetId = null;
     public int $correctionAmount = 0;
     public string $correctionNote = '';
 
@@ -51,20 +53,19 @@ class Ledger extends Component
     ======================================================= */
     public function mount(): void
     {
-        // default: all-time ledger
-        $this->month = null;
+        $this->month  = null;
         $this->txDate = now()->toDateString();
     }
 
     /* ======================================================
         RESET PAGINATION ON FILTER CHANGE
     ======================================================= */
-    public function updatedMonth() { $this->resetPage(); }
-    public function updatedFilterUnitId() { $this->resetPage(); }
+    public function updatedMonth()          { $this->resetPage(); }
+    public function updatedFilterUnitId()   { $this->resetPage(); }
     public function updatedFilterTenantId() { $this->resetPage(); }
 
     /* ======================================================
-        COMPUTED: UNITS & TENANTS
+        MASTER DATA
     ======================================================= */
     public function getUnitsProperty()
     {
@@ -77,39 +78,8 @@ class Ledger extends Component
     }
 
     /* ======================================================
-        BASE QUERY (SINGLE SOURCE OF TRUTH)
+        FILTER UTIL
     ======================================================= */
-    protected function baseQuery()
-    {
-        $query = Transaction::query()
-            ->with(['original'])
-            ->withCount(['corrections'])
-            ->orderByDesc('transacted_at')
-            ->orderByDesc('id');
-
-        // MONTH FILTER (SAFE STRING BASED)
-        if ($this->month && preg_match('/^\d{4}-\d{2}$/', $this->month)) {
-            $start = $this->month . '-01 00:00:00';
-            $end   = date('Y-m-t 23:59:59', strtotime($start));
-            $query->whereBetween('transacted_at', [$start, $end]);
-        }
-
-        if ($this->filterUnitId) {
-            $query->forUnit($this->filterUnitId);
-        }
-
-        if ($this->filterTenantId) {
-            $query->forTenant($this->filterTenantId);
-        }
-
-        return $query;
-    }
-
-    public function getTransactionsProperty()
-    {
-        return $this->baseQuery()->paginate(25);
-    }
-
     public function clearFilters(): void
     {
         $this->month = null;
@@ -119,7 +89,7 @@ class Ledger extends Component
     }
 
     /* ======================================================
-        ADD TRANSACTION FLOW
+        ADD TRANSACTION
     ======================================================= */
     public function openTransactionModal(): void
     {
@@ -135,14 +105,15 @@ class Ledger extends Component
 
     protected function resetTransactionForm(): void
     {
-        $this->txType = 'expense';
+        $this->txType     = 'expense';
         $this->txCategory = '';
-        $this->txAmount = 0;
-        $this->txDate = now()->toDateString();
-        $this->txScope = 'global';
-        $this->txUnitId = null;
+        $this->txAmount   = 0;
+        $this->txDate     = now()->toDateString();
+        $this->txNote     = '';
+
+        $this->txScope    = 'global';
+        $this->txUnitId   = null;
         $this->txTenantId = null;
-        $this->txNote = '';
     }
 
     public function saveTransaction(): void
@@ -152,38 +123,50 @@ class Ledger extends Component
             'txCategory' => 'required|string|max:50',
             'txAmount'   => 'required|integer|min:1',
             'txDate'     => 'required|date',
+            'txNote'     => 'nullable|string|max:255',
             'txScope'    => 'required|in:global,unit,tenant',
             'txUnitId'   => 'nullable|exists:units,id',
             'txTenantId' => 'nullable|exists:tenants,id',
-            'txNote'     => 'nullable|string|max:255',
         ]);
 
-        // DOMAIN GUARDS
         if ($this->txScope === 'unit' && ! $this->txUnitId) {
             throw ValidationException::withMessages([
-                'txUnitId' => 'Unit is required for unit-scoped transaction.',
+                'txUnitId' => 'Unit is required.',
             ]);
         }
 
         if ($this->txScope === 'tenant' && ! $this->txTenantId) {
             throw ValidationException::withMessages([
-                'txTenantId' => 'Tenant is required for tenant-scoped transaction.',
+                'txTenantId' => 'Tenant is required.',
             ]);
         }
 
-        Transaction::create([
-            'type'          => $this->txType,
-            'category'      => $this->txCategory,
-            'amount'        => $this->txAmount,
-            'transacted_at' => $this->txDate,
-            'unit_id'       => $this->txScope !== 'global'
-                ? $this->txUnitId
-                : null,
-            'tenant_id'     => $this->txScope === 'tenant'
-                ? $this->txTenantId
-                : null,
-            'note'          => $this->txNote,
-        ]);
+        DB::transaction(function () {
+
+            $tx = Transaction::create([
+                'type'          => $this->txType,
+                'category'      => $this->txCategory,
+                'amount'        => $this->txAmount,
+                'transacted_at' => $this->txDate,
+                'note'          => $this->txNote,
+            ]);
+
+            if ($this->txScope === 'unit') {
+                TransactionTag::create([
+                    'transaction_id' => $tx->id,
+                    'type'           => 'unit',
+                    'reference_id'   => $this->txUnitId,
+                ]);
+            }
+
+            if ($this->txScope === 'tenant') {
+                TransactionTag::create([
+                    'transaction_id' => $tx->id,
+                    'type'           => 'tenant',
+                    'reference_id'   => $this->txTenantId,
+                ]);
+            }
+        });
 
         $this->closeTransactionModal();
         $this->resetPage();
@@ -194,8 +177,7 @@ class Ledger extends Component
     ======================================================= */
     public function openCorrection(int $transactionId): void
     {
-        $this->resetCorrectionForm();
-        $this->correctionTarget = Transaction::findOrFail($transactionId);
+        $this->correctionTarget   = Transaction::findOrFail($transactionId);
         $this->correctionTargetId = $transactionId;
         $this->showCorrectionModal = true;
     }
@@ -203,15 +185,10 @@ class Ledger extends Component
     public function closeCorrection(): void
     {
         $this->showCorrectionModal = false;
-        $this->resetCorrectionForm();
-    }
-
-    protected function resetCorrectionForm(): void
-    {
-        $this->correctionTarget = null;
+        $this->correctionTarget   = null;
         $this->correctionTargetId = null;
-        $this->correctionAmount = 0;
-        $this->correctionNote = '';
+        $this->correctionAmount   = 0;
+        $this->correctionNote     = '';
     }
 
     public function submitCorrection(TransactionService $service): void
@@ -232,12 +209,41 @@ class Ledger extends Component
     }
 
     /* ======================================================
-        RENDER
+        RENDER — INI KUNCI
     ======================================================= */
     public function render()
     {
+        $query = Transaction::query()
+            ->with(['original', 'tags'])
+            ->withCount('corrections')
+            ->orderByDesc('transacted_at')
+            ->orderByDesc('id');
+
+        // FILTER: MONTH
+        if ($this->month && preg_match('/^\d{4}-\d{2}$/', $this->month)) {
+            $start = "{$this->month}-01 00:00:00";
+            $end   = date('Y-m-t 23:59:59', strtotime($start));
+            $query->whereBetween('transacted_at', [$start, $end]);
+        }
+
+        // FILTER: UNIT
+        if ($this->filterUnitId) {
+            $query->whereHas('tags', fn ($q) =>
+                $q->where('type', 'unit')
+                  ->where('reference_id', $this->filterUnitId)
+            );
+        }
+
+        // FILTER: TENANT
+        if ($this->filterTenantId) {
+            $query->whereHas('tags', fn ($q) =>
+                $q->where('type', 'tenant')
+                  ->where('reference_id', $this->filterTenantId)
+            );
+        }
+
         return view('livewire.ledger', [
-            'transactions' => $this->transactions,
+            'transactions' => $query->paginate(25),
         ])->layout('layouts.dashboard');
     }
 }

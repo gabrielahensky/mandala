@@ -4,62 +4,33 @@ namespace App\Services;
 
 use App\Models\Transaction;
 use Illuminate\Support\Carbon;
-use InvalidArgumentException;
 
 class TransactionService
 {
-    public function correct(
-        Transaction $original,
-        int $amount,
-        string $note,
-        ?Carbon $transactedAt = null
-    ): Transaction {
-        // =====================
-        // Guards
-        // =====================
-
-        if ($original->isCorrection()) {
-            throw new InvalidArgumentException(
-                'Cannot correct a correction transaction.'
-            );
-        }
-
-        if ($amount <= 0) {
-            throw new InvalidArgumentException(
-                'Correction amount must be positive.'
-            );
-        }
-
-        if (trim($note) === '') {
-            throw new InvalidArgumentException(
-                'Correction note is required.'
-            );
-        }
-
-        // =====================
-        // Determine opposite type
-        // =====================
-
-        $type = $original->type === 'income'
-            ? 'expense'
-            : 'income';
-
-        // =====================
-        // Create correction
-        // =====================
-
+    public function recordIncome(array $data): Transaction
+    {
         return Transaction::create([
-            'type'            => $type,
-            'amount'          => $amount,
-            'category'        => $original->category, // IMPORTANT
-            'note'            => '[Correction] ' . $note,
-            'transacted_at'   => ($transactedAt ?? now())->toDateString(),
+            'type'          => 'income',
+            'category'      => $data['category'],
+            'amount'        => $data['amount'],
+            'transacted_at' => Carbon::parse($data['date']),
+            'unit_id'       => $data['unit_id'] ?? null,
+            'tenant_id'     => $data['tenant_id'] ?? null,
+            'note'          => $data['note'] ?? null,
+            'rent_cycle_id' => $data['rent_cycle_id'] ?? null,
+        ]);
+    }
 
-            // Audit trail
-            'correction_of'   => $original->id,
-
-            // Domain inheritance
-            'rent_cycle_id'   => $original->rent_cycle_id,
+    public function recordExpense(array $data): Transaction
+    {
+        return Transaction::create([
+            'type'          => 'expense',
+            'category'      => $data['category'],
+            'amount'        => $data['amount'],
+            'transacted_at' => Carbon::parse($data['date']),
+            'unit_id'       => $data['unit_id'] ?? null,
+            'tenant_id'     => $data['tenant_id'] ?? null,
+            'note'          => $data['note'] ?? null,
         ]);
     }
 }

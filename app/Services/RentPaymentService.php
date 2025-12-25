@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\RentBilling;
 use App\Models\RentCycle;
-use App\Models\Transaction;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -12,17 +11,20 @@ use Illuminate\Validation\ValidationException;
 class RentPaymentService
 {
     /**
-     * Apply payment to rent invoices (oldest unpaid first).
+     * Apply a payment to unpaid rent billings (FIFO).
      *
-     * NOTE:
-     * - Supports multi-invoice settlement
-     * - Partial invoice payment is NOT persisted (yet)
+     * IMPORTANT DOMAIN RULES:
+     * - This service DOES NOT create ledger transactions
+     * - Ledger entries are created via RentBillingPaid event
+     * - Safe to call from:
+     *   - Tenant page
+     *   - Admin dashboard
+     *   - Backfill / migration
      */
     public function applyPayment(
         RentCycle $rent,
         int $amount,
-        Carbon|string $paidAt,
-        ?string $note = null
+        string $paidAt
     ): void {
         if ($amount <= 0) {
             throw ValidationException::withMessages([
@@ -30,53 +32,52 @@ class RentPaymentService
             ]);
         }
 
-        $paidAt = Carbon::parse($paidAt);
+        DB::transaction(function () use ($rent, $amount, $paidAt) {
 
-        DB::transaction(function () use ($rent, $amount, $paidAt, $note) {
-
+            $paidAt    = Carbon::parse($paidAt);
             $remaining = $amount;
 
-            // lock unpaid invoices (oldest first)
-            $invoices = RentBilling::query()
+            /*
+            |--------------------------------------------------
+            | Load unpaid billings (FIFO by billing_month)
+            |--------------------------------------------------
+            */
+            $billings = RentBilling::query()
                 ->where('rent_cycle_id', $rent->id)
                 ->whereNull('paid_at')
                 ->orderBy('billing_month')
                 ->lockForUpdate()
                 ->get();
 
-            if ($invoices->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'invoice' => 'No unpaid invoices found for this rent.',
-                ]);
+            /*
+            |--------------------------------------------------
+            | VALID CASE:
+            | - No unpaid billings (advance / manual payment)
+            |--------------------------------------------------
+            */
+            if ($billings->isEmpty()) {
+                return;
             }
 
-            foreach ($invoices as $invoice) {
+            /*
+            |--------------------------------------------------
+            | Apply payment sequentially
+            |--------------------------------------------------
+            */
+            foreach ($billings as $billing) {
                 if ($remaining <= 0) {
                     break;
                 }
 
-                $invoiceAmount = (int) $invoice->amount;
-
-                if ($remaining >= $invoiceAmount) {
-                    // fully settle invoice
-                    $invoice->markPaid($paidAt);
-                    $remaining -= $invoiceAmount;
+                if ($remaining >= $billing->amount) {
+                    // Full payment for this billing
+                    $billing->markPaid($paidAt); // <-- EVENT FIRED HERE
+                    $remaining -= $billing->amount;
                 } else {
-                    // partial payment (not persisted yet)
-                    // remaining tracked only in ledger difference
-                    $remaining = 0;
+                    // Partial payment not supported (by design)
+                    break;
                 }
             }
-
-            // record ledger transaction (single source of truth)
-            Transaction::create([
-                'type'          => 'income',
-                'category'      => 'Rent',
-                'amount'        => $amount,
-                'note'          => $note,
-                'transacted_at' => $paidAt,
-                'rent_cycle_id' => $rent->id,
-            ]);
         });
     }
 }

@@ -3,32 +3,35 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
 class Transaction extends Model
 {
+    /* ======================================================
+        CORE
+    ======================================================= */
+
     protected $fillable = [
         'type',
-        'amount',
         'category',
+        'amount',
         'note',
         'transacted_at',
         'correction_of',
-        'rent_cycle_id',
-        'tenant_id',
-        'unit_id',
+        'source_type',
+        'source_id',
     ];
 
     protected $casts = [
-        'transacted_at' => 'date',
+        'transacted_at' => 'datetime',
     ];
 
-    /* =========================
-        CORRECTION RELATION
-    ========================== */
+    /* ======================================================
+        CORRECTION CHAIN
+    ======================================================= */
 
     public function original(): BelongsTo
     {
@@ -42,40 +45,28 @@ class Transaction extends Model
 
     public function isCorrection(): bool
     {
-        return !is_null($this->correction_of);
+        return $this->correction_of !== null;
     }
 
-    /* =========================
-        EVIDENCE
-    ========================== */
-
-    public function evidences(): HasMany
-    {
-        return $this->hasMany(TransactionEvidence::class);
-    }
-
-    public function hasEvidence(): bool
-    {
-        return $this->relationLoaded('evidences')
-            ? $this->evidences->isNotEmpty()
-            : $this->evidences()->exists();
-    }
-
-    /* =========================
-        TAG CORE RELATION
-    ========================== */
+    /* ======================================================
+        TAGGING (DOMAIN CONTEXT)
+    ======================================================= */
 
     public function tags(): HasMany
     {
         return $this->hasMany(TransactionTag::class);
     }
 
-    /* =========================
-        DERIVED DOMAIN ACCESSORS
-    ========================== */
+    /* ======================================================
+        DERIVED ACCESSORS (READ-ONLY, SAFE)
+    ======================================================= */
 
     public function units(): Collection
     {
+        if (! $this->relationLoaded('tags')) {
+            $this->load('tags');
+        }
+
         return Unit::whereIn(
             'id',
             $this->tags
@@ -86,6 +77,10 @@ class Transaction extends Model
 
     public function tenants(): Collection
     {
+        if (! $this->relationLoaded('tags')) {
+            $this->load('tags');
+        }
+
         return Tenant::whereIn(
             'id',
             $this->tags
@@ -96,34 +91,66 @@ class Transaction extends Model
 
     public function hasUnit(): bool
     {
+        if (! $this->relationLoaded('tags')) {
+            $this->load('tags');
+        }
+
         return $this->tags->contains('type', 'unit');
     }
 
     public function hasTenant(): bool
     {
+        if (! $this->relationLoaded('tags')) {
+            $this->load('tags');
+        }
+
         return $this->tags->contains('type', 'tenant');
     }
 
-    /* =========================
-        QUERY SCOPES (LEDGER)
-    ========================== */
+    /* ======================================================
+        QUERY SCOPES — LEDGER CORE
+    ======================================================= */
+
+    /**
+     * Idempotent source guard
+     * contoh: rent_billing:123
+     */
+    public function scopeFromSource(
+        Builder $query,
+        string $type,
+        int $id
+    ): Builder {
+        return $query
+            ->where('source_type', $type)
+            ->where('source_id', $id);
+    }
+
+    /**
+     * Generic tag filter
+     * contoh: tagged('unit', 1)
+     */
+    public function scopeTagged(
+        Builder $query,
+        string $type,
+        int $id
+    ): Builder {
+        return $query->whereHas('tags', function ($q) use ($type, $id) {
+            $q->where('type', $type)
+              ->where('reference_id', $id);
+        });
+    }
+
+    /* ======================================================
+        BACKWARD COMPAT SCOPES (JANGAN DIHAPUS)
+    ======================================================= */
+
+    public function scopeForTenant(Builder $query, int $tenantId): Builder
+    {
+        return $this->scopeTagged($query, 'tenant', $tenantId);
+    }
 
     public function scopeForUnit(Builder $query, int $unitId): Builder
     {
-        return $query->whereHas('tags', function ($q) use ($unitId) {
-            $q->where('type', 'unit')
-              ->where('reference_id', $unitId);
-        });
-    }
-    public function scopeForTenant(Builder $query, int $tenantId): Builder
-    {
-        return $query->whereHas('tags', function ($q) use ($tenantId) {
-            $q->where('type', 'tenant')
-              ->where('reference_id', $tenantId);
-        });
-    }
-    public function rentCycle(): BelongsTo
-    {
-        return $this->belongsTo(RentCycle::class);
+        return $this->scopeTagged($query, 'unit', $unitId);
     }
 }
