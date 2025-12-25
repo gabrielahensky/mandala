@@ -5,11 +5,12 @@ namespace App\Livewire;
 use Livewire\Component;
 use Illuminate\Validation\ValidationException;
 use App\Models\Tenant;
+use App\Models\RentCycle;
 
 class Tenants extends Component
 {
     /* =========================
-        Form State
+        FORM STATE
     ========================== */
     public ?int $editingId = null;
     public string $name = '';
@@ -19,20 +20,20 @@ class Tenants extends Component
     public bool $showModal = false;
 
     /* =========================
-        Delete Confirmation
+        DELETE STATE
     ========================== */
     public bool $confirmingDelete = false;
     public ?int $deleteId = null;
 
     /* =========================
-        Data
+        DATA
     ========================== */
     public $tenants;
 
     /* =========================
-        Lifecycle
+        LIFECYCLE
     ========================== */
-    public function mount()
+    public function mount(): void
     {
         $this->loadTenants();
     }
@@ -40,13 +41,17 @@ class Tenants extends Component
     protected function loadTenants(): void
     {
         $this->tenants = Tenant::query()
-        ->whereNull('deleted_at')
-        ->orderBy('name')
-        ->get();
+            ->whereNull('deleted_at')
+            ->with([
+                // load ALL rent cycles, not filtered
+                'rentCycles.unit',
+            ])
+            ->orderBy('name')
+            ->get();
     }
 
     /* =========================
-        Create / Edit
+        CREATE / EDIT
     ========================== */
     public function create(): void
     {
@@ -59,9 +64,9 @@ class Tenants extends Component
         $tenant = Tenant::findOrFail($id);
 
         $this->editingId = $tenant->id;
-        $this->name = $tenant->name;
+        $this->name  = $tenant->name;
         $this->phone = $tenant->phone;
-        $this->note = $tenant->note;
+        $this->note  = $tenant->note;
 
         $this->showModal = true;
     }
@@ -91,39 +96,47 @@ class Tenants extends Component
     {
         $this->showModal = false;
         $this->resetForm();
+        $this->resetErrorBag();
     }
 
     protected function resetForm(): void
     {
         $this->editingId = null;
-        $this->name = '';
+        $this->name  = '';
         $this->phone = null;
-        $this->note = null;
+        $this->note  = null;
     }
 
     /* =========================
-        Delete
+        DELETE
     ========================== */
     public function askDelete(int $id): void
     {
+        $this->resetErrorBag();
+
         $this->deleteId = $id;
         $this->confirmingDelete = true;
     }
 
     public function confirmDelete(): void
     {
-        $tenant = Tenant::withTrashed()->findOrFail($this->deleteId);
+        $tenant = Tenant::findOrFail($this->deleteId);
 
-        // 🚫 GUARD: tenant pernah / sedang sewa
-        if ($tenant->rentCycles()->exists()) {
+        // 🚫 HARD GUARD — CEK LANGSUNG KE DB
+        if (
+            RentCycle::where('tenant_id', $tenant->id)
+                ->whereNull('end_date')
+                ->exists()
+        ) {
             throw ValidationException::withMessages([
-                'tenant' => 'Tenant already has rental history and cannot be deleted.',
+                'tenant' => 'Tenant is still renting and cannot be deleted.',
             ]);
         }
 
-        // SAFE: soft delete
+        // ✅ SOFT DELETE
         $tenant->delete();
 
+        // RESET UI STATE
         $this->confirmingDelete = false;
         $this->deleteId = null;
 
@@ -131,7 +144,7 @@ class Tenants extends Component
     }
 
     /* =========================
-        Render
+        RENDER
     ========================== */
     public function render()
     {

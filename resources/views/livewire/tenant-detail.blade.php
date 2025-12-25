@@ -1,57 +1,110 @@
 <div class="px-6 py-6 space-y-8">
 
     {{-- =========================
-        HEADER
+        TOP BAR — BACK
     ========================== --}}
-    <div class="flex items-start justify-between gap-4">
-        <div>
-            <h1 class="text-2xl font-bold">
-                {{ $tenant->name }}
-            </h1>
-
-            @if ($this->activeRent)
-                <p class="text-sm text-green-600 mt-1">
-                    Currently renting
-                    <span class="font-medium">
-                        {{ $this->activeRent->unit->name }}
-                    </span>
-                </p>
-            @else
-                <p class="text-sm text-gray-500 mt-1">
-                    Not renting any unit
-                </p>
-            @endif
-        </div>
-
-        {{-- ACTIONS --}}
-        <div class="flex gap-2">
-
-            {{-- TENANT BELUM SEWA --}}
-            @if (! $this->activeRent)
-                <button
-                    wire:click="openAssignUnitModal"
-                    class="px-4 py-2 bg-blue-600 text-white text-sm rounded">
-                    Assign Unit
-                </button>
-            @endif
-
-            {{-- TENANT SEDANG SEWA --}}
-            @if ($this->activeRent)
-                <button
-                    wire:click="openPaymentModal"
-                    class="px-4 py-2 bg-gray-900 text-white text-sm rounded">
-                    Add Rent Payment
-                </button>
-
-                <button
-                    wire:click="openEndRentModal"
-                    class="px-4 py-2 bg-red-600 text-white text-sm rounded">
-                    End Rent
-                </button>
-            @endif
-
-        </div>
+    <div>
+        <a href="/tenants"
+           class="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900">
+            ← Back to Tenants
+        </a>
     </div>
+
+    {{-- =========================
+        HEADER — TENANT IDENTITY
+    ========================== --}}
+    <div class="bg-white border rounded-xl p-5 space-y-4">
+
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+
+            {{-- IDENTITY --}}
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight">
+                    {{ $tenant->name }}
+                </h1>
+
+                @if ($this->activeRent)
+                    <p class="mt-1 inline-flex items-center gap-2 text-sm
+                              bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                        ● Active —
+                        <span class="font-medium">
+                            {{ $this->activeRent->unit->name }}
+                        </span>
+                    </p>
+                @else
+                    <p class="mt-1 inline-flex items-center text-sm
+                              bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+                        Inactive
+                    </p>
+                @endif
+            </div>
+
+            {{-- PRIMARY ACTIONS --}}
+            <div class="flex flex-wrap gap-2">
+
+                @if (! $this->activeRent)
+                    <button
+                        wire:click="openAssignUnitModal"
+                        class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg">
+                        Assign Unit
+                    </button>
+                @endif
+
+                @if ($this->activeRent)
+                    <button
+                        wire:click="openPaymentModal"
+                        class="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg">
+                        Add Payment
+                    </button>
+
+                    <button
+                        wire:click="openEndRentModal"
+                        class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">
+                        End Rent
+                    </button>
+                @endif
+
+            </div>
+        </div>
+
+    </div>
+
+    {{-- =========================
+        BILLING SUMMARY
+    ========================== --}}
+    @if ($this->tenantBillingSummary)
+        <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+            <div class="bg-white p-4 rounded-xl border">
+                <p class="text-xs text-gray-500">Total Paid</p>
+                <p class="font-semibold">
+                    Rp {{ number_format($this->tenantBillingSummary['paid_total']) }}
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border">
+                <p class="text-xs text-gray-500">Total Rent Due</p>
+                <p class="font-semibold">
+                    Rp {{ number_format($this->tenantBillingSummary['expected_total']) }}
+                </p>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl border">
+                <p class="text-xs text-gray-500">Remaining Balance</p>
+
+                @if ($this->tenantBillingSummary['debt'] > 0)
+                    <p class="font-semibold text-red-600">
+                        Rp {{ number_format($this->tenantBillingSummary['debt']) }}
+                    </p>
+                @else
+                    <p class="font-semibold text-green-600">
+                        Settled
+                    </p>
+                @endif
+            </div>
+
+        </section>
+    @endif
 
     {{-- =========================
         RENT INVOICES
@@ -81,9 +134,7 @@
                         </p>
                     </div>
 
-                    @php
-                        $label = $invoice->reminderLabel();
-                    @endphp
+                    @php $label = $invoice->reminderLabel(); @endphp
 
                     @if ($label)
                         <span
@@ -93,10 +144,8 @@
                                     str_starts_with($label, 'H-') && (int)substr($label, 2) >= 5,
                                 'bg-yellow-100 text-yellow-700' =>
                                     str_starts_with($label, 'H-') && (int)substr($label, 2) <= 4,
-                                'bg-orange-100 text-orange-700' =>
-                                    $label === 'H',
-                                'bg-red-100 text-red-700' =>
-                                    $label === 'OVERDUE',
+                                'bg-orange-100 text-orange-700' => $label === 'H',
+                                'bg-red-100 text-red-700' => $label === 'OVERDUE',
                             ])">
                             {{ $label }}
                         </span>
@@ -113,49 +162,19 @@
     @endif
 
     {{-- =========================
-        BILLING SUMMARY
-    ========================== --}}
-    @if ($this->tenantBillingSummary)
-        <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-            <div class="bg-white p-4 rounded-lg border">
-                <p class="text-xs text-gray-500">Total Paid</p>
-                <p class="font-semibold">
-                    Rp {{ number_format($this->tenantBillingSummary['paid_total']) }}
-                </p>
-            </div>
-
-            <div class="bg-white p-4 rounded-lg border">
-                <p class="text-xs text-gray-500">Total Rent Due</p>
-                <p class="font-semibold">
-                    Rp {{ number_format($this->tenantBillingSummary['expected_total']) }}
-                </p>
-            </div>
-
-            <div class="bg-white p-4 rounded-lg border">
-                <p class="text-xs text-gray-500">Remaining Balance</p>
-
-                @if ($this->tenantBillingSummary['debt'] > 0)
-                    <p class="text-red-600 font-semibold">
-                        Rp {{ number_format($this->tenantBillingSummary['debt']) }}
-                    </p>
-                @else
-                    <p class="text-green-600 font-semibold">
-                        Settled
-                    </p>
-                @endif
-            </div>
-
-        </section>
-    @endif
-
-    {{-- =========================
         RENT TRANSACTIONS
     ========================== --}}
     @if ($this->activeRent)
         <section class="bg-white rounded-xl border overflow-x-auto">
+
+            <div class="px-5 py-4 border-b">
+                <h2 class="text-lg font-semibold">
+                    Rent Transactions
+                </h2>
+            </div>
+
             <table class="w-full text-sm">
-                <thead class="bg-gray-100">
+                <thead class="bg-gray-50 text-gray-600">
                     <tr>
                         <th class="px-4 py-2 text-left">Date</th>
                         <th class="px-4 py-2 text-left">Note</th>
@@ -170,7 +189,7 @@
                                 {{ $tx->transacted_at->format('d M Y') }}
                             </td>
                             <td class="px-4 py-2">
-                                {{ $tx->note ?: '-' }}
+                                {{ $tx->note ?: '—' }}
                             </td>
                             <td class="px-4 py-2 text-right">
                                 Rp {{ number_format($tx->amount) }}
@@ -186,6 +205,7 @@
                     @endforelse
                 </tbody>
             </table>
+
         </section>
     @endif
 

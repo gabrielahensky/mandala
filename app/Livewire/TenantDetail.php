@@ -18,7 +18,15 @@ class TenantDetail extends Component
     public Tenant $tenant;
 
     /* =========================
-        UI State
+        DOMAIN STATE (EXPLICIT)
+    ========================== */
+    public $activeRent = null;
+    public Collection $activeInvoices;
+    public Collection $rentTransactions;
+    public ?array $tenantBillingSummary = null;
+
+    /* =========================
+        UI STATE
     ========================== */
 
     // Payment
@@ -38,28 +46,59 @@ class TenantDetail extends Component
     public string $endNote = '';
 
     /* =========================
-        Lifecycle
+        LIFECYCLE
     ========================== */
 
     public function mount(Tenant $tenant): void
     {
-        $this->tenant = $tenant->load([
-            'activeRent.unit',
-        ]);
+        $this->tenant = $tenant;
 
         $this->paidAt    = now()->toDateString();
         $this->startDate = now()->toDateString();
         $this->endDate   = now()->toDateString();
+
+        $this->reloadData();
     }
 
     /* =========================
-        Derived State
+        CORE RELOAD (WAJIB)
     ========================== */
 
-    public function getActiveRentProperty()
+    protected function reloadData(): void
     {
-        return $this->tenant->activeRent;
+        $this->tenant->refresh();
+
+        $this->activeRent = $this->tenant
+            ->rentCycles()
+            ->whereNull('end_date')
+            ->with('unit')
+            ->first();
+
+        $this->activeInvoices = $this->activeRent
+            ? RentBilling::query()
+                ->where('rent_cycle_id', $this->activeRent->id)
+                ->whereNull('paid_at')
+                ->orderBy('due_date')
+                ->get()
+            : collect();
+
+        $this->rentTransactions = $this->activeRent
+            ? $this->activeRent
+                ->transactions()
+                ->where('category', 'Rent')
+                ->orderByDesc('transacted_at')
+                ->get()
+            : collect();
+
+        $this->tenantBillingSummary = $this->activeRent
+            ? app(RentBillingService::class)
+                ->summaryWithCarry($this->activeRent, now())
+            : null;
     }
+
+    /* =========================
+        DERIVED HELPERS (SAFE)
+    ========================== */
 
     public function getAvailableUnitsProperty()
     {
@@ -69,44 +108,8 @@ class TenantDetail extends Component
             ->get();
     }
 
-    public function getActiveInvoicesProperty(): Collection
-    {
-        if (! $this->activeRent) {
-            return collect();
-        }
-
-        return RentBilling::query()
-            ->where('rent_cycle_id', $this->activeRent->id)
-            ->whereNull('paid_at')
-            ->orderBy('due_date')
-            ->get();
-    }
-
-    public function getRentTransactionsProperty(): Collection
-    {
-        if (! $this->activeRent) {
-            return collect();
-        }
-
-        return $this->activeRent
-            ->transactions()
-            ->where('category', 'Rent')
-            ->orderByDesc('transacted_at')
-            ->get();
-    }
-
-    public function getTenantBillingSummaryProperty(): ?array
-    {
-        if (! $this->activeRent) {
-            return null;
-        }
-
-        return app(RentBillingService::class)
-            ->summaryWithCarry($this->activeRent, now());
-    }
-
     /* =========================
-        Assign Unit
+        ASSIGN UNIT
     ========================== */
 
     public function openAssignUnitModal(): void
@@ -137,12 +140,12 @@ class TenantDetail extends Component
             startDate: $this->startDate
         );
 
-        $this->refreshTenant();
         $this->showAssignUnitModal = false;
+        $this->reloadData();
     }
 
     /* =========================
-        End Rent
+        END RENT
     ========================== */
 
     public function openEndRentModal(): void
@@ -166,12 +169,12 @@ class TenantDetail extends Component
             note: $this->endNote
         );
 
-        $this->refreshTenant();
         $this->showEndRentModal = false;
+        $this->reloadData();
     }
 
     /* =========================
-        Payment
+        PAYMENT
     ========================== */
 
     public function openPaymentModal(): void
@@ -201,9 +204,9 @@ class TenantDetail extends Component
             note: $this->note
         );
 
-        $this->refreshTenant();
-        $this->resetPaymentForm();
         $this->showPaymentModal = false;
+        $this->resetPaymentForm();
+        $this->reloadData();
     }
 
     protected function resetPaymentForm(): void
@@ -213,14 +216,8 @@ class TenantDetail extends Component
         $this->paidAt = now()->toDateString();
     }
 
-    protected function refreshTenant(): void
-    {
-        $this->tenant->refresh();
-        $this->tenant->load('activeRent.unit');
-    }
-
     /* =========================
-        Render
+        RENDER
     ========================== */
 
     public function render()
