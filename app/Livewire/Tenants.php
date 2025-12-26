@@ -10,20 +10,20 @@ use App\Models\RentCycle;
 class Tenants extends Component
 {
     /* =========================
-        FORM STATE
+        TENANT FORM STATE
     ========================== */
-    public ?int $editingId = null;
+    public ?int $editingTenantId = null;
     public string $name = '';
     public ?string $phone = null;
     public ?string $note = null;
 
-    public bool $showModal = false;
+    public bool $showTenantFormModal = false;
 
     /* =========================
-        DELETE STATE
+        DELETE CONFIRMATION STATE
     ========================== */
-    public bool $confirmingDelete = false;
-    public ?int $deleteId = null;
+    public bool $showDeleteConfirmModal = false;
+    public ?int $tenantToDeleteId = null;
 
     /* =========================
         DATA
@@ -38,12 +38,15 @@ class Tenants extends Component
         $this->loadTenants();
     }
 
+    /* =========================
+        DATA LOADER
+    ========================== */
     protected function loadTenants(): void
     {
         $this->tenants = Tenant::query()
             ->whereNull('deleted_at')
             ->with([
-                // load ALL rent cycles, not filtered
+                // Load all rent cycles + units (no filtering here)
                 'rentCycles.unit',
             ])
             ->orderBy('name')
@@ -55,20 +58,20 @@ class Tenants extends Component
     ========================== */
     public function create(): void
     {
-        $this->resetForm();
-        $this->showModal = true;
+        $this->resetTenantForm();
+        $this->showTenantFormModal = true;
     }
 
-    public function edit(int $id): void
+    public function edit(int $tenantId): void
     {
-        $tenant = Tenant::findOrFail($id);
+        $tenant = Tenant::findOrFail($tenantId);
 
-        $this->editingId = $tenant->id;
+        $this->editingTenantId = $tenant->id;
         $this->name  = $tenant->name;
         $this->phone = $tenant->phone;
         $this->note  = $tenant->note;
 
-        $this->showModal = true;
+        $this->showTenantFormModal = true;
     }
 
     public function save(): void
@@ -80,7 +83,7 @@ class Tenants extends Component
         ]);
 
         Tenant::updateOrCreate(
-            ['id' => $this->editingId],
+            ['id' => $this->editingTenantId],
             [
                 'name'  => $this->name,
                 'phone' => $this->phone,
@@ -88,41 +91,48 @@ class Tenants extends Component
             ]
         );
 
-        $this->closeModal();
+        $this->closeTenantFormModal();
         $this->loadTenants();
     }
 
-    public function closeModal(): void
+    public function closeTenantFormModal(): void
     {
-        $this->showModal = false;
-        $this->resetForm();
+        $this->showTenantFormModal = false;
+        $this->resetTenantForm();
         $this->resetErrorBag();
     }
 
-    protected function resetForm(): void
+    protected function resetTenantForm(): void
     {
-        $this->editingId = null;
+        $this->editingTenantId = null;
         $this->name  = '';
         $this->phone = null;
         $this->note  = null;
     }
 
     /* =========================
-        DELETE
+        DELETE FLOW
     ========================== */
-    public function askDelete(int $id): void
+    public function askDelete(int $tenantId): void
     {
         $this->resetErrorBag();
 
-        $this->deleteId = $id;
-        $this->confirmingDelete = true;
+        $this->tenantToDeleteId = $tenantId;
+        $this->showDeleteConfirmModal = true;
+    }
+
+    public function cancelDelete(): void
+    {
+        $this->showDeleteConfirmModal = false;
+        $this->tenantToDeleteId = null;
+        $this->resetErrorBag();
     }
 
     public function confirmDelete(): void
     {
-        $tenant = Tenant::findOrFail($this->deleteId);
+        $tenant = Tenant::findOrFail($this->tenantToDeleteId);
 
-        // 🚫 HARD GUARD — CEK LANGSUNG KE DB
+        // HARD GUARD — must not have active rent
         if (
             RentCycle::where('tenant_id', $tenant->id)
                 ->whereNull('end_date')
@@ -133,12 +143,11 @@ class Tenants extends Component
             ]);
         }
 
-        // ✅ SOFT DELETE
+        // Soft delete
         $tenant->delete();
 
-        // RESET UI STATE
-        $this->confirmingDelete = false;
-        $this->deleteId = null;
+        // Reset delete state
+        $this->cancelDelete();
 
         $this->loadTenants();
     }

@@ -14,6 +14,7 @@
         </div>
 
         <button
+            type="button"
             wire:click="create"
             class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium
                    bg-gray-900 text-white rounded-lg hover:bg-gray-800">
@@ -22,21 +23,23 @@
     </div>
 
     {{-- =========================
-        LIST
+        TENANT LIST
     ========================== --}}
-    @if ($tenants->count())
+    @if ($tenants->isNotEmpty())
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+
             @foreach ($tenants as $tenant)
 
                 @php
-                    $activeRent = $tenant->rentCycles
-                        ->firstWhere('end_date', null);
+                    // UI-SAFE DERIVED STATE
+                    $activeRent = $tenant->rentCycles->firstWhere('end_date', null);
                     $activeUnit = $activeRent?->unit;
                 @endphp
 
                 <div class="bg-white border rounded-xl p-4 hover:shadow-sm transition">
 
-                    <div class="flex items-start justify-between">
+                    {{-- HEADER --}}
+                    <div class="flex items-start justify-between gap-4">
                         <div>
                             <a href="/tenants/{{ $tenant->id }}"
                                class="font-semibold text-gray-900 hover:underline">
@@ -67,8 +70,9 @@
                         </div>
 
                         {{-- ACTIONS --}}
-                        <div class="flex gap-2">
+                        <div class="flex gap-2 shrink-0">
                             <button
+                                type="button"
                                 wire:click="edit({{ $tenant->id }})"
                                 class="text-xs text-blue-600 hover:underline">
                                 Edit
@@ -76,6 +80,7 @@
 
                             @if (! $activeRent)
                                 <button
+                                    type="button"
                                     wire:click="askDelete({{ $tenant->id }})"
                                     class="text-xs text-red-600 hover:underline">
                                     Delete
@@ -105,6 +110,7 @@
 
                 </div>
             @endforeach
+
         </div>
     @else
         {{-- EMPTY STATE --}}
@@ -113,6 +119,7 @@
                 No tenants yet.
             </p>
             <button
+                type="button"
                 wire:click="create"
                 class="mt-4 inline-flex items-center px-4 py-2 text-sm
                        bg-gray-900 text-white rounded-lg">
@@ -147,7 +154,6 @@
                             type="text"
                             wire:model.defer="name"
                             class="w-full rounded-lg border px-3 py-2 text-sm"
-                            placeholder="Tenant name"
                         />
                         @error('name')
                             <p class="text-xs text-red-500 mt-1">
@@ -181,12 +187,14 @@
 
                 <div class="flex justify-end gap-2 pt-4">
                     <button
+                        type="button"
                         wire:click="closeModal"
                         class="px-3 py-2 text-sm text-gray-600">
                         Cancel
                     </button>
 
                     <button
+                        type="button"
                         wire:click="save"
                         class="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg">
                         Save
@@ -216,12 +224,14 @@
 
                 <div class="flex justify-end gap-2 pt-4">
                     <button
-                        wire:click="$set('confirmingDelete', false)"
+                        type="button"
+                        wire:click="cancelDelete"
                         class="px-3 py-2 text-sm text-gray-600">
                         Cancel
                     </button>
 
                     <button
+                        type="button"
                         wire:click="confirmDelete"
                         class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">
                         Yes, delete

@@ -18,7 +18,7 @@ class TenantDetail extends Component
     public Tenant $tenant;
 
     /* =========================
-        DOMAIN STATE (EXPLICIT)
+        DOMAIN STATE
     ========================== */
     public $activeRent = null;
     public Collection $activeInvoices;
@@ -26,29 +26,34 @@ class TenantDetail extends Component
     public ?array $tenantBillingSummary = null;
 
     /* =========================
-        UI STATE
+        UI STATE — TENANT
     ========================== */
+    public bool $showTenantPaymentModal = false;
+    public bool $showTenantAssignUnitModal = false;
+    public bool $showTenantEndRentModal = false;
 
-    // Payment
-    public bool $showPaymentModal = false;
+    /* =========================
+        PAYMENT FORM
+    ========================== */
     public int $amount = 0;
     public string $paidAt;
     public string $note = '';
 
-    // Assign unit
-    public bool $showAssignUnitModal = false;
+    /* =========================
+        ASSIGN UNIT FORM
+    ========================== */
     public ?int $selectedUnitId = null;
     public string $startDate;
 
-    // End rent
-    public bool $showEndRentModal = false;
+    /* =========================
+        END RENT FORM
+    ========================== */
     public string $endDate;
     public string $endNote = '';
 
     /* =========================
         LIFECYCLE
     ========================== */
-
     public function mount(Tenant $tenant): void
     {
         $this->tenant = $tenant;
@@ -61,9 +66,8 @@ class TenantDetail extends Component
     }
 
     /* =========================
-        CORE RELOAD (WAJIB)
+        CORE RELOAD
     ========================== */
-
     protected function reloadData(): void
     {
         $this->tenant->refresh();
@@ -75,8 +79,7 @@ class TenantDetail extends Component
             ->first();
 
         $this->activeInvoices = $this->activeRent
-            ? RentBilling::query()
-                ->where('rent_cycle_id', $this->activeRent->id)
+            ? RentBilling::where('rent_cycle_id', $this->activeRent->id)
                 ->whereNull('paid_at')
                 ->orderBy('due_date')
                 ->get()
@@ -97,13 +100,11 @@ class TenantDetail extends Component
     }
 
     /* =========================
-        DERIVED HELPERS (SAFE)
+        DERIVED
     ========================== */
-
     public function getAvailableUnitsProperty()
     {
-        return Unit::query()
-            ->whereDoesntHave('activeRent')
+        return Unit::whereDoesntHave('activeRent')
             ->orderBy('name')
             ->get();
     }
@@ -111,8 +112,7 @@ class TenantDetail extends Component
     /* =========================
         ASSIGN UNIT
     ========================== */
-
-    public function openAssignUnitModal(): void
+    public function openTenantAssignUnitModal(): void
     {
         if ($this->activeRent) {
             throw ValidationException::withMessages([
@@ -122,7 +122,12 @@ class TenantDetail extends Component
 
         $this->selectedUnitId = null;
         $this->startDate = now()->toDateString();
-        $this->showAssignUnitModal = true;
+        $this->showTenantAssignUnitModal = true;
+    }
+
+    public function closeTenantAssignUnitModal(): void
+    {
+        $this->showTenantAssignUnitModal = false;
     }
 
     public function assignUnit(): void
@@ -132,23 +137,20 @@ class TenantDetail extends Component
             'startDate'      => 'required|date',
         ]);
 
-        $unit = Unit::findOrFail($this->selectedUnitId);
-
         app(RentCycleService::class)->startRent(
-            unit: $unit,
+            unit: Unit::findOrFail($this->selectedUnitId),
             tenant: $this->tenant,
             startDate: $this->startDate
         );
 
-        $this->showAssignUnitModal = false;
+        $this->closeTenantAssignUnitModal();
         $this->reloadData();
     }
 
     /* =========================
         END RENT
     ========================== */
-
-    public function openEndRentModal(): void
+    public function openTenantEndRentModal(): void
     {
         if (! $this->activeRent) {
             throw ValidationException::withMessages([
@@ -158,7 +160,12 @@ class TenantDetail extends Component
 
         $this->endDate = now()->toDateString();
         $this->endNote = '';
-        $this->showEndRentModal = true;
+        $this->showTenantEndRentModal = true;
+    }
+
+    public function closeTenantEndRentModal(): void
+    {
+        $this->showTenantEndRentModal = false;
     }
 
     public function endRent(): void
@@ -169,15 +176,14 @@ class TenantDetail extends Component
             note: $this->endNote
         );
 
-        $this->showEndRentModal = false;
+        $this->closeTenantEndRentModal();
         $this->reloadData();
     }
 
     /* =========================
         PAYMENT
     ========================== */
-
-    public function openPaymentModal(): void
+    public function openTenantPaymentModal(): void
     {
         if (! $this->activeRent) {
             throw ValidationException::withMessages([
@@ -185,8 +191,16 @@ class TenantDetail extends Component
             ]);
         }
 
-        $this->resetPaymentForm();
-        $this->showPaymentModal = true;
+        $this->amount = 0;
+        $this->note   = '';
+        $this->paidAt = now()->toDateString();
+
+        $this->showTenantPaymentModal = true;
+    }
+
+    public function closeTenantPaymentModal(): void
+    {
+        $this->showTenantPaymentModal = false;
     }
 
     public function savePayment(): void
@@ -204,21 +218,9 @@ class TenantDetail extends Component
             note: $this->note
         );
 
-        $this->showPaymentModal = false;
-        $this->resetPaymentForm();
+        $this->closeTenantPaymentModal();
         $this->reloadData();
     }
-
-    protected function resetPaymentForm(): void
-    {
-        $this->amount = 0;
-        $this->note   = '';
-        $this->paidAt = now()->toDateString();
-    }
-
-    /* =========================
-        RENDER
-    ========================== */
 
     public function render()
     {
