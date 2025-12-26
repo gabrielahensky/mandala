@@ -4,9 +4,7 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\DB;
 use App\Models\Transaction;
-use App\Models\TransactionTag;
 use App\Services\TransactionService;
 use Illuminate\Validation\ValidationException;
 
@@ -17,7 +15,7 @@ class Ledger extends Component
     protected $paginationTheme = 'tailwind';
 
     /* ======================================================
-        FILTER STATE (REALTIME)
+        FILTER STATE
     ======================================================= */
     public ?string $month = null;        // YYYY-MM
     public ?int $filterUnitId = null;
@@ -28,38 +26,24 @@ class Ledger extends Component
     ======================================================= */
     public bool $showTransactionModal = false;
 
-    public string $txType = 'expense';
+    public string $txType = 'expense';   // income | expense
     public string $txCategory = '';
     public int    $txAmount = 0;
     public string $txDate;
     public string $txNote = '';
 
-    // DOMAIN SCOPE
-    public string $txScope = 'global'; // global | unit | tenant
+    public string $txScope = 'global';   // global | unit | tenant
     public ?int $txUnitId = null;
     public ?int $txTenantId = null;
-
-    /* ======================================================
-        CORRECTION MODAL
-    ======================================================= */
-    public bool $showCorrectionModal = false;
-    public ?Transaction $correctionTarget = null;
-    public ?int $correctionTargetId = null;
-    public int $correctionAmount = 0;
-    public string $correctionNote = '';
 
     /* ======================================================
         LIFECYCLE
     ======================================================= */
     public function mount(): void
     {
-        $this->month  = null;
         $this->txDate = now()->toDateString();
     }
 
-    /* ======================================================
-        RESET PAGINATION ON FILTER CHANGE
-    ======================================================= */
     public function updatedMonth()          { $this->resetPage(); }
     public function updatedFilterUnitId()   { $this->resetPage(); }
     public function updatedFilterTenantId() { $this->resetPage(); }
@@ -116,7 +100,7 @@ class Ledger extends Component
         $this->txTenantId = null;
     }
 
-    public function saveTransaction(): void
+    public function saveTransaction(TransactionService $service): void
     {
         $this->validate([
             'txType'     => 'required|in:income,expense',
@@ -125,8 +109,6 @@ class Ledger extends Component
             'txDate'     => 'required|date',
             'txNote'     => 'nullable|string|max:255',
             'txScope'    => 'required|in:global,unit,tenant',
-            'txUnitId'   => 'nullable|exists:units,id',
-            'txTenantId' => 'nullable|exists:tenants,id',
         ]);
 
         if ($this->txScope === 'unit' && ! $this->txUnitId) {
@@ -141,81 +123,37 @@ class Ledger extends Component
             ]);
         }
 
-        DB::transaction(function () {
+        /*
+         |--------------------------------------------------
+         | IMPORTANT DOMAIN RULE
+         |--------------------------------------------------
+         | - NO CORRECTION
+         | - NO EDIT
+         | - NO DELETE
+         | - Adjustment = NEW transaction + note
+         */
 
-            $tx = Transaction::create([
-                'type'          => $this->txType,
-                'category'      => $this->txCategory,
-                'amount'        => $this->txAmount,
-                'transacted_at' => $this->txDate,
-                'note'          => $this->txNote,
-            ]);
-
-            if ($this->txScope === 'unit') {
-                TransactionTag::create([
-                    'transaction_id' => $tx->id,
-                    'type'           => 'unit',
-                    'reference_id'   => $this->txUnitId,
-                ]);
-            }
-
-            if ($this->txScope === 'tenant') {
-                TransactionTag::create([
-                    'transaction_id' => $tx->id,
-                    'type'           => 'tenant',
-                    'reference_id'   => $this->txTenantId,
-                ]);
-            }
-        });
+        $service->record([
+            'type'      => $this->txType,
+            'category'  => $this->txCategory,
+            'amount'    => $this->txAmount,
+            'date'      => $this->txDate,
+            'note'      => $this->txNote,
+            'unit_id'   => $this->txScope === 'unit' ? $this->txUnitId : null,
+            'tenant_id' => $this->txScope === 'tenant' ? $this->txTenantId : null,
+        ]);
 
         $this->closeTransactionModal();
         $this->resetPage();
     }
 
     /* ======================================================
-        CORRECTION FLOW
-    ======================================================= */
-    public function openCorrection(int $transactionId): void
-    {
-        $this->correctionTarget   = Transaction::findOrFail($transactionId);
-        $this->correctionTargetId = $transactionId;
-        $this->showCorrectionModal = true;
-    }
-
-    public function closeCorrection(): void
-    {
-        $this->showCorrectionModal = false;
-        $this->correctionTarget   = null;
-        $this->correctionTargetId = null;
-        $this->correctionAmount   = 0;
-        $this->correctionNote     = '';
-    }
-
-    public function submitCorrection(TransactionService $service): void
-    {
-        $this->validate([
-            'correctionTargetId' => 'required|exists:transactions,id',
-            'correctionAmount'   => 'required|integer|min:1',
-            'correctionNote'     => 'required|string|min:5',
-        ]);
-
-        $service->correct(
-            Transaction::findOrFail($this->correctionTargetId),
-            $this->correctionAmount,
-            $this->correctionNote
-        );
-
-        $this->closeCorrection();
-    }
-
-    /* ======================================================
-        RENDER — INI KUNCI
+        RENDER
     ======================================================= */
     public function render()
     {
         $query = Transaction::query()
-            ->with(['original', 'tags'])
-            ->withCount('corrections')
+            ->with('tags')
             ->orderByDesc('transacted_at')
             ->orderByDesc('id');
 
