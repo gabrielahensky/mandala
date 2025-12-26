@@ -17,57 +17,59 @@ class TenantDetail extends Component
 {
     public Tenant $tenant;
 
-    /* =========================
-        DOMAIN STATE
-    ========================== */
+    /* =====================================================
+        DOMAIN STATE (READ ONLY)
+    ====================================================== */
     public $activeRent = null;
     public Collection $activeInvoices;
     public Collection $rentTransactions;
     public ?array $tenantBillingSummary = null;
 
-    /* =========================
-        UI STATE — TENANT
-    ========================== */
-    public bool $showTenantPaymentModal = false;
-    public bool $showTenantAssignUnitModal = false;
-    public bool $showTenantEndRentModal = false;
+    /* =====================================================
+        UI STATE
+    ====================================================== */
+    public bool $showPaymentModal    = false;
+    public bool $showAssignUnitModal = false;
+    public bool $showEndRentModal    = false;
 
-    /* =========================
+    /* =====================================================
         PAYMENT FORM
-    ========================== */
+    ====================================================== */
     public int $amount = 0;
     public string $paidAt;
     public string $note = '';
 
-    /* =========================
+    /* =====================================================
         ASSIGN UNIT FORM
-    ========================== */
+    ====================================================== */
     public ?int $selectedUnitId = null;
     public string $startDate;
 
-    /* =========================
+    /* =====================================================
         END RENT FORM
-    ========================== */
+    ====================================================== */
     public string $endDate;
     public string $endNote = '';
 
-    /* =========================
+    /* =====================================================
         LIFECYCLE
-    ========================== */
+    ====================================================== */
     public function mount(Tenant $tenant): void
     {
         $this->tenant = $tenant;
 
-        $this->paidAt    = now()->toDateString();
-        $this->startDate = now()->toDateString();
-        $this->endDate   = now()->toDateString();
+        $today = now()->toDateString();
+
+        $this->paidAt    = $today;
+        $this->startDate = $today;
+        $this->endDate   = $today;
 
         $this->reloadData();
     }
 
-    /* =========================
-        CORE RELOAD
-    ========================== */
+    /* =====================================================
+        CORE DOMAIN RELOAD (WAJIB DIPANGGIL)
+    ====================================================== */
     protected function reloadData(): void
     {
         $this->tenant->refresh();
@@ -99,20 +101,21 @@ class TenantDetail extends Component
             : null;
     }
 
-    /* =========================
+    /* =====================================================
         DERIVED
-    ========================== */
+    ====================================================== */
     public function getAvailableUnitsProperty()
     {
-        return Unit::whereDoesntHave('activeRent')
+        return Unit::query()
+            ->whereDoesntHave('activeRent')
             ->orderBy('name')
             ->get();
     }
 
-    /* =========================
+    /* =====================================================
         ASSIGN UNIT
-    ========================== */
-    public function openTenantAssignUnitModal(): void
+    ====================================================== */
+    public function openAssignUnitModal(): void
     {
         if ($this->activeRent) {
             throw ValidationException::withMessages([
@@ -120,14 +123,16 @@ class TenantDetail extends Component
             ]);
         }
 
+        $this->resetErrorBag();
         $this->selectedUnitId = null;
         $this->startDate = now()->toDateString();
-        $this->showTenantAssignUnitModal = true;
+        $this->showAssignUnitModal = true;
     }
 
-    public function closeTenantAssignUnitModal(): void
+    public function closeAssignUnitModal(): void
     {
-        $this->showTenantAssignUnitModal = false;
+        $this->showAssignUnitModal = false;
+        $this->resetErrorBag();
     }
 
     public function assignUnit(): void
@@ -143,14 +148,14 @@ class TenantDetail extends Component
             startDate: $this->startDate
         );
 
-        $this->closeTenantAssignUnitModal();
+        $this->closeAssignUnitModal();
         $this->reloadData();
     }
 
-    /* =========================
+    /* =====================================================
         END RENT
-    ========================== */
-    public function openTenantEndRentModal(): void
+    ====================================================== */
+    public function openEndRentModal(): void
     {
         if (! $this->activeRent) {
             throw ValidationException::withMessages([
@@ -158,14 +163,16 @@ class TenantDetail extends Component
             ]);
         }
 
+        $this->resetErrorBag();
         $this->endDate = now()->toDateString();
         $this->endNote = '';
-        $this->showTenantEndRentModal = true;
+        $this->showEndRentModal = true;
     }
 
-    public function closeTenantEndRentModal(): void
+    public function closeEndRentModal(): void
     {
-        $this->showTenantEndRentModal = false;
+        $this->showEndRentModal = false;
+        $this->resetErrorBag();
     }
 
     public function endRent(): void
@@ -176,14 +183,14 @@ class TenantDetail extends Component
             note: $this->endNote
         );
 
-        $this->closeTenantEndRentModal();
+        $this->closeEndRentModal();
         $this->reloadData();
     }
 
-    /* =========================
+    /* =====================================================
         PAYMENT
-    ========================== */
-    public function openTenantPaymentModal(): void
+    ====================================================== */
+    public function openPaymentModal(): void
     {
         if (! $this->activeRent) {
             throw ValidationException::withMessages([
@@ -191,16 +198,20 @@ class TenantDetail extends Component
             ]);
         }
 
-        $this->amount = 0;
-        $this->note   = '';
-        $this->paidAt = now()->toDateString();
+        $this->resetErrorBag();
 
-        $this->showTenantPaymentModal = true;
+        // sensible default: unpaid total
+        $this->amount = $this->tenantBillingSummary['outstanding'] ?? 0;
+        $this->paidAt = now()->toDateString();
+        $this->note   = '';
+
+        $this->showPaymentModal = true;
     }
 
-    public function closeTenantPaymentModal(): void
+    public function closePaymentModal(): void
     {
-        $this->showTenantPaymentModal = false;
+        $this->showPaymentModal = false;
+        $this->resetErrorBag();
     }
 
     public function savePayment(): void
@@ -218,10 +229,13 @@ class TenantDetail extends Component
             note: $this->note
         );
 
-        $this->closeTenantPaymentModal();
+        $this->closePaymentModal();
         $this->reloadData();
     }
 
+    /* =====================================================
+        RENDER
+    ====================================================== */
     public function render()
     {
         return view('livewire.tenant-detail')

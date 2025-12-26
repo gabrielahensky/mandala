@@ -6,56 +6,71 @@ use Livewire\Component;
 use Illuminate\Validation\ValidationException;
 use App\Models\Tenant;
 use App\Models\RentCycle;
+use Illuminate\Support\Collection;
 
 class Tenants extends Component
 {
-    /* =========================
-        TENANT FORM STATE
-    ========================== */
+    /* =====================================================
+        DATA
+    ====================================================== */
+    public Collection $tenants;
+
+    /* =====================================================
+        TENANT FORM STATE (CREATE / EDIT)
+    ====================================================== */
+    public bool $showTenantFormModal = false;
     public ?int $editingTenantId = null;
+
     public string $name = '';
     public ?string $phone = null;
     public ?string $note = null;
 
-    public bool $showTenantFormModal = false;
-
-    /* =========================
-        DELETE CONFIRMATION STATE
-    ========================== */
+    /* =====================================================
+        DELETE CONFIRMATION
+    ====================================================== */
     public bool $showDeleteConfirmModal = false;
     public ?int $tenantToDeleteId = null;
 
-    /* =========================
-        DATA
-    ========================== */
-    public $tenants;
-
-    /* =========================
+    /* =====================================================
         LIFECYCLE
-    ========================== */
+    ====================================================== */
     public function mount(): void
     {
-        $this->loadTenants();
+        $this->reloadTenants();
     }
 
-    /* =========================
-        DATA LOADER
-    ========================== */
-    protected function loadTenants(): void
+    /* =====================================================
+        CORE DATA LOADER (SINGLE SOURCE OF TRUTH)
+    ====================================================== */
+    protected function reloadTenants(): void
     {
         $this->tenants = Tenant::query()
             ->whereNull('deleted_at')
             ->with([
-                // Load all rent cycles + units (no filtering here)
-                'rentCycles.unit',
+                // load active rent only
+                'rentCycles' => fn ($q) =>
+                    $q->whereNull('end_date')->with('unit'),
             ])
             ->orderBy('name')
             ->get();
     }
 
-    /* =========================
+    /* =====================================================
+        DERIVED HELPERS (SAFE FOR BLADE)
+    ====================================================== */
+    public function tenantHasActiveRent(Tenant $tenant): bool
+    {
+        return $tenant->rentCycles->isNotEmpty();
+    }
+
+    public function tenantActiveUnit(Tenant $tenant)
+    {
+        return $tenant->rentCycles->first()?->unit;
+    }
+
+    /* =====================================================
         CREATE / EDIT
-    ========================== */
+    ====================================================== */
     public function create(): void
     {
         $this->resetTenantForm();
@@ -91,11 +106,11 @@ class Tenants extends Component
             ]
         );
 
-        $this->closeTenantFormModal();
-        $this->loadTenants();
+        $this->closeTenantForm();
+        $this->reloadTenants();
     }
 
-    public function closeTenantFormModal(): void
+    public function closeTenantForm(): void
     {
         $this->showTenantFormModal = false;
         $this->resetTenantForm();
@@ -110,9 +125,9 @@ class Tenants extends Component
         $this->note  = null;
     }
 
-    /* =========================
+    /* =====================================================
         DELETE FLOW
-    ========================== */
+    ====================================================== */
     public function askDelete(int $tenantId): void
     {
         $this->resetErrorBag();
@@ -123,8 +138,8 @@ class Tenants extends Component
 
     public function cancelDelete(): void
     {
-        $this->showDeleteConfirmModal = false;
         $this->tenantToDeleteId = null;
+        $this->showDeleteConfirmModal = false;
         $this->resetErrorBag();
     }
 
@@ -132,7 +147,7 @@ class Tenants extends Component
     {
         $tenant = Tenant::findOrFail($this->tenantToDeleteId);
 
-        // HARD GUARD — must not have active rent
+        // 🚫 HARD DOMAIN GUARD — DB LEVEL
         if (
             RentCycle::where('tenant_id', $tenant->id)
                 ->whereNull('end_date')
@@ -146,15 +161,13 @@ class Tenants extends Component
         // Soft delete
         $tenant->delete();
 
-        // Reset delete state
         $this->cancelDelete();
-
-        $this->loadTenants();
+        $this->reloadTenants();
     }
 
-    /* =========================
+    /* =====================================================
         RENDER
-    ========================== */
+    ====================================================== */
     public function render()
     {
         return view('livewire.tenants')
