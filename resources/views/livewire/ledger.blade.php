@@ -5,10 +5,10 @@
     ======================================================= --}}
     <div class="flex flex-col sm:flex-row sm:justify-between gap-4">
         <div>
-            <h1 class="text-2xl font-bold">Ledger</h1>
+            <h1 class="text-2xl font-bold">Financial Records</h1>
 
             <p class="text-sm text-gray-500">
-                Financial records
+                History of money coming in and going out
                 @if ($month)
                     • {{ $month }}
                 @endif
@@ -18,24 +18,30 @@
                 <button
                     wire:click="openTransactionModal"
                     class="px-4 py-2 bg-gray-900 text-white text-sm rounded hover:bg-gray-800">
-                    + Add Transaction
+                    + Record New Transaction
                 </button>
+
+                <p class="text-xs text-gray-400 mt-1">
+                    Use this for manual income or expenses
+                </p>
             </div>
         </div>
 
-        <a href="/dashboard" class="text-sm text-gray-500 hover:underline">
+        <a href="/dashboard"
+           class="text-sm text-gray-500 hover:underline self-start">
             ← Back to dashboard
         </a>
     </div>
 
     {{-- ======================================================
-        FILTER BAR (REALTIME)
+        FILTER BAR
     ======================================================= --}}
     <div class="bg-white border rounded-xl p-4 flex flex-wrap gap-4 items-end">
 
-        {{-- MONTH --}}
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Month</label>
+            <label class="block text-xs text-gray-500 mb-1">
+                Month
+            </label>
             <input
                 type="month"
                 wire:model.live="month"
@@ -43,14 +49,15 @@
             />
         </div>
 
-        {{-- UNIT --}}
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Unit</label>
+            <label class="block text-xs text-gray-500 mb-1">
+                Filter by unit
+            </label>
             <select
                 wire:model.live="filterUnitId"
                 class="border rounded px-3 py-2 text-sm w-44"
             >
-                <option value="">All Units</option>
+                <option value="">All units</option>
                 @foreach ($this->units as $unit)
                     <option value="{{ $unit->id }}">
                         {{ $unit->name }}
@@ -59,14 +66,15 @@
             </select>
         </div>
 
-        {{-- TENANT --}}
         <div>
-            <label class="block text-xs text-gray-500 mb-1">Tenant</label>
+            <label class="block text-xs text-gray-500 mb-1">
+                Filter by tenant
+            </label>
             <select
                 wire:model.live="filterTenantId"
                 class="border rounded px-3 py-2 text-sm w-44"
             >
-                <option value="">All Tenants</option>
+                <option value="">All tenants</option>
                 @foreach ($this->tenants as $tenant)
                     <option value="{{ $tenant->id }}">
                         {{ $tenant->name }}
@@ -75,13 +83,12 @@
             </select>
         </div>
 
-        {{-- RESET --}}
         @if ($month || $filterUnitId || $filterTenantId)
             <div class="pt-5">
                 <button
                     wire:click="clearFilters"
                     class="text-xs text-gray-500 hover:underline">
-                    Reset filters
+                    Clear filters
                 </button>
             </div>
         @endif
@@ -114,7 +121,7 @@
                         @endif
                     </p>
 
-                    {{-- TAG CONTEXT --}}
+                    {{-- CONTEXT TAGS --}}
                     @if ($t->tags->isNotEmpty())
                         <div class="flex gap-2 text-xs text-gray-400">
                             @foreach ($t->tags as $tag)
@@ -130,7 +137,7 @@
                 <div class="text-right space-y-1">
                     <p class="font-semibold
                         {{ $t->type === 'income' ? 'text-green-600' : 'text-red-600' }}">
-                        {{ $t->type === 'income' ? '+' : '-' }}
+                        {{ $t->type === 'income' ? '+' : '–' }}
                         Rp {{ number_format($t->amount) }}
                     </p>
 
@@ -138,7 +145,7 @@
                         <button
                             wire:click="openCorrection({{ $t->id }})"
                             class="text-xs text-blue-600 hover:underline">
-                            Correct
+                            Fix this record
                         </button>
                     @endif
                 </div>
@@ -146,7 +153,7 @@
             </div>
         @empty
             <div class="p-6 text-center text-gray-500 text-sm">
-                No transactions found
+                No financial records found for this filter
             </div>
         @endforelse
     </div>
@@ -165,50 +172,62 @@
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div class="bg-white w-full max-w-lg rounded-xl p-6 space-y-4">
 
-                <h2 class="text-lg font-semibold">Add Transaction</h2>
+                <h2 class="text-lg font-semibold">
+                    Record a Transaction
+                </h2>
+                <p class="text-sm text-gray-500">
+                    Use this for expenses or income not generated automatically
+                </p>
 
-                {{-- TYPE --}}
                 <div>
-                    <label class="text-xs text-gray-500 mb-1 block">Type</label>
-                    <select wire:model="txType" class="w-full border rounded px-3 py-2 text-sm">
-                        <option value="expense">Expense</option>
-                        <option value="income">Income</option>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Transaction type
+                    </label>
+                    <select wire:model="txType"
+                            class="w-full border rounded px-3 py-2 text-sm">
+                        <option value="expense">Money out (expense)</option>
+                        <option value="income">Money in (income)</option>
                     </select>
                 </div>
 
-                {{-- CATEGORY --}}
                 <div>
-                    <label class="text-xs text-gray-500 mb-1 block">Category</label>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Category
+                    </label>
                     <input wire:model.defer="txCategory"
                            class="w-full border rounded px-3 py-2 text-sm"
-                           placeholder="Electricity, Rent, Maintenance" />
+                           placeholder="Electricity, Maintenance, Other income" />
                 </div>
 
-                {{-- AMOUNT --}}
                 <div>
-                    <label class="text-xs text-gray-500 mb-1 block">Amount</label>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Amount
+                    </label>
                     <input wire:model.defer="txAmount"
                            type="number"
                            class="w-full border rounded px-3 py-2 text-sm" />
                 </div>
 
-                {{-- DATE --}}
                 <div>
-                    <label class="text-xs text-gray-500 mb-1 block">Date</label>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Transaction date
+                    </label>
                     <input wire:model.defer="txDate"
                            type="date"
                            class="w-full border rounded px-3 py-2 text-sm" />
                 </div>
 
-                {{-- NOTE --}}
                 <div>
-                    <label class="text-xs text-gray-500 mb-1 block">Note</label>
+                    <label class="text-xs text-gray-500 mb-1 block">
+                        Note (optional)
+                    </label>
                     <textarea wire:model.defer="txNote"
                               rows="2"
-                              class="w-full border rounded px-3 py-2 text-sm"></textarea>
+                              class="w-full border rounded px-3 py-2 text-sm"
+                              placeholder="Example: paid electricity bill for July">
+                    </textarea>
                 </div>
 
-                {{-- ACTION --}}
                 <div class="flex justify-end gap-2 pt-4">
                     <button wire:click="closeTransactionModal"
                             class="text-sm text-gray-600">
@@ -217,7 +236,7 @@
 
                     <button wire:click="saveTransaction"
                             class="px-4 py-2 bg-gray-900 text-white text-sm rounded">
-                        Save
+                        Save record
                     </button>
                 </div>
 
