@@ -10,15 +10,17 @@ use App\Services\RentCycleService;
 use App\Services\RentBillingService;
 use App\Services\RentPaymentService;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\ValidationException;
 use Carbon\Carbon;
 
 class TenantDetail extends Component
 {
+    /* =====================================================
+        CORE ENTITY
+    ====================================================== */
     public Tenant $tenant;
 
     /* =====================================================
-        DOMAIN STATE (READ ONLY)
+        DOMAIN STATE (READ-ONLY FOR UI)
     ====================================================== */
     public $activeRent = null;
     public Collection $activeInvoices;
@@ -36,19 +38,19 @@ class TenantDetail extends Component
         ASSIGN UNIT FORM
     ====================================================== */
     public ?int $selectedUnitId = null;
-    public string $startDate;
+    public string $startDate = '';
 
     /* =====================================================
         END RENT FORM
     ====================================================== */
-    public string $endDate;
+    public string $endDate = '';
     public string $endNote = '';
 
     /* =====================================================
         PAYMENT FORM
     ====================================================== */
     public int $amount = 0;
-    public string $paidAt;
+    public string $paidAt = '';
     public string $note = '';
 
     /* =====================================================
@@ -67,7 +69,7 @@ class TenantDetail extends Component
     }
 
     /* =====================================================
-        CORE RELOAD — SATU-SATUNYA SUMBER KEBENARAN
+        CORE RELOAD (SINGLE SOURCE OF TRUTH)
     ====================================================== */
     protected function reloadData(): void
     {
@@ -79,9 +81,9 @@ class TenantDetail extends Component
             ->with('unit')
             ->first();
 
-        // SAFETY DEFAULTS
-        $this->activeInvoices     = collect();
-        $this->rentTransactions  = collect();
+        // defaults (WAJIB)
+        $this->activeInvoices = collect();
+        $this->rentTransactions = collect();
         $this->tenantBillingSummary = null;
 
         if (! $this->activeRent) {
@@ -105,7 +107,7 @@ class TenantDetail extends Component
     }
 
     /* =====================================================
-        DERIVED
+        DERIVED DATA
     ====================================================== */
     public function getAvailableUnitsProperty()
     {
@@ -117,17 +119,17 @@ class TenantDetail extends Component
     }
 
     /* =====================================================
-        ASSIGN UNIT
+        ASSIGN UNIT — UI
     ====================================================== */
     public function openAssignUnitModal(): void
     {
+        $this->resetErrorBag();
+
         if ($this->activeRent) {
-            throw ValidationException::withMessages([
-                'rent' => 'Tenant already has an active rent.',
-            ]);
+            $this->addError('rent', 'Tenant already has an active rent.');
+            return;
         }
 
-        $this->resetErrorBag();
         $this->selectedUnitId = null;
         $this->startDate = now()->toDateString();
         $this->showAssignUnitModal = true;
@@ -139,6 +141,9 @@ class TenantDetail extends Component
         $this->resetErrorBag();
     }
 
+    /* =====================================================
+        ASSIGN UNIT — COMMAND
+    ====================================================== */
     public function assignUnit(): void
     {
         $this->validate([
@@ -157,17 +162,17 @@ class TenantDetail extends Component
     }
 
     /* =====================================================
-        END RENT
+        END RENT — UI
     ====================================================== */
     public function openEndRentModal(): void
     {
+        $this->resetErrorBag();
+
         if (! $this->activeRent) {
-            throw ValidationException::withMessages([
-                'rent' => 'Tenant is not currently renting.',
-            ]);
+            $this->addError('rent', 'Tenant is not currently renting.');
+            return;
         }
 
-        $this->resetErrorBag();
         $this->endDate = now()->toDateString();
         $this->endNote = '';
         $this->showEndRentModal = true;
@@ -179,6 +184,9 @@ class TenantDetail extends Component
         $this->resetErrorBag();
     }
 
+    /* =====================================================
+        END RENT — COMMAND
+    ====================================================== */
     public function endRent(): void
     {
         app(RentCycleService::class)->endRentSafely(
@@ -192,20 +200,20 @@ class TenantDetail extends Component
     }
 
     /* =====================================================
-        PAYMENT
+        PAYMENT — UI
     ====================================================== */
     public function openPaymentModal(): void
     {
+        $this->resetErrorBag();
+
         if (! $this->activeRent) {
-            throw ValidationException::withMessages([
-                'rent' => 'Tenant does not have an active rent.',
-            ]);
+            $this->addError('payment', 'Tenant does not have an active rent.');
+            return;
         }
 
         if (! $this->tenantBillingSummary || $this->tenantBillingSummary['debt'] <= 0) {
-            throw ValidationException::withMessages([
-                'payment' => 'No outstanding rent to pay.',
-            ]);
+            $this->addError('payment', 'No outstanding rent to pay.');
+            return;
         }
 
         $this->amount = $this->tenantBillingSummary['debt'];
@@ -221,6 +229,9 @@ class TenantDetail extends Component
         $this->resetErrorBag();
     }
 
+    /* =====================================================
+        PAYMENT — COMMAND
+    ====================================================== */
     public function savePayment(): void
     {
         $this->validate([
@@ -233,13 +244,15 @@ class TenantDetail extends Component
             rent: $this->activeRent,
             amount: $this->amount,
             paidAt: $this->paidAt
-            // NOTE DISENGAJA TIDAK DIKIRIM (SERVICE BELUM SUPPORT)
         );
 
         $this->closePaymentModal();
         $this->reloadData();
     }
 
+    /* =====================================================
+        RENDER
+    ====================================================== */
     public function render()
     {
         return view('livewire.tenant-detail')
