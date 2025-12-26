@@ -47,9 +47,7 @@ class Tenants extends Component
         $this->tenants = Tenant::query()
             ->whereNull('deleted_at')
             ->with([
-                // load active rent only
-                'rentCycles' => fn ($q) =>
-                    $q->whereNull('end_date')->with('unit'),
+                'activeRent.unit', 
             ])
             ->orderBy('name')
             ->get();

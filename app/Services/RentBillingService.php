@@ -2,66 +2,45 @@
 
 namespace App\Services;
 
+use App\Models\RentBilling;
 use App\Models\RentCycle;
-use App\Models\Transaction;
 use Carbon\Carbon;
 
 class RentBillingService
 {
     /* ======================================================
-        MONTHLY (STRICT) — C6.3
-       ====================================================== */
-
-    protected function expectedForMonth(RentCycle $rent, Carbon $month): int
-    {
-        if (!$rent->monthly_rent) {
-            return 0;
-        }
-
-        $start  = Carbon::parse($rent->start_date)->startOfMonth();
-        $target = $month->copy()->startOfMonth();
-
-        // belum mulai sewa
-        if ($target->lessThan($start)) {
-            return 0;
-        }
-
-        return (int) $rent->monthly_rent;
-    }
-
-    protected function paidForMonth(RentCycle $rent, Carbon $month): int
-    {
-        return Transaction::query()
-            ->where('type', 'income')
-            ->where('category', 'Rent')
-            ->forTenant($rent->tenant_id)
-            ->forUnit($rent->unit_id)
-            ->whereBetween(
-                'transacted_at',
-                [
-                    $month->copy()->startOfMonth(),
-                    $month->copy()->endOfMonth(),
-                ]
-            )
-            ->sum('amount');
-    }
+        MONTHLY BILLING — SINGLE MONTH
+    ====================================================== */
 
     public function summaryForMonth(RentCycle $rent, Carbon $month): array
     {
-        $expected = $this->expectedForMonth($rent, $month);
-        $paid     = $this->paidForMonth($rent, $month);
+        $billings = RentBilling::query()
+            ->where('rent_cycle_id', $rent->id)
+            ->whereMonth('billing_month', $month->month)
+            ->whereYear('billing_month', $month->year)
+            ->get();
+
+        $expected = $billings->sum('amount');
+
+        $paid = $billings
+            ->whereNotNull('paid_at')
+            ->sum('amount');
+
+        $outstanding = $billings
+            ->whereNull('paid_at')
+            ->sum('amount');
 
         return [
             'expected'    => $expected,
             'paid'        => $paid,
-            'outstanding' => max(0, $expected - $paid),
-            'status'      => $paid >= $expected ? 'paid' : 'unpaid',
+            'outstanding' => $outstanding,
+            'status'      => $outstanding === 0 ? 'paid' : 'unpaid',
         ];
     }
 
     /* ======================================================
-        WHO HASN’T PAID — C6.3 OUTPUT
-       ====================================================== */
+        WHO HASN’T PAID — UNPAID LIST (CORE)
+    ====================================================== */
 
     public function unpaidRentsForMonth(Carbon $month)
     {
@@ -69,16 +48,25 @@ class RentBillingService
             ->whereNull('end_date')
             ->with(['unit', 'tenant'])
             ->get()
-            ->map(function ($rent) use ($month) {
-                $summary = $this->summaryForMonth($rent, $month);
+            ->map(function (RentCycle $rent) use ($month) {
+
+                $billings = RentBilling::query()
+                    ->where('rent_cycle_id', $rent->id)
+                    ->whereMonth('billing_month', $month->month)
+                    ->whereYear('billing_month', $month->year)
+                    ->get();
+
+                $expected = $billings->sum('amount');
+                $paid     = $billings->whereNotNull('paid_at')->sum('amount');
+                $outstanding = $billings->whereNull('paid_at')->sum('amount');
 
                 return [
                     'rent'        => $rent,
                     'unit'        => $rent->unit,
                     'tenant'      => $rent->tenant,
-                    'expected'    => $summary['expected'],
-                    'paid'        => $summary['paid'],
-                    'outstanding' => $summary['outstanding'],
+                    'expected'    => $expected,
+                    'paid'        => $paid,
+                    'outstanding' => $outstanding,
                 ];
             })
             ->filter(fn ($row) => $row['outstanding'] > 0)
@@ -86,55 +74,36 @@ class RentBillingService
     }
 
     /* ======================================================
-        CARRY / HISTORICAL — C6.5
-       ====================================================== */
-
-    protected function totalPaidUntil(RentCycle $rent, Carbon $month): int
-    {
-        return Transaction::query()
-            ->where('type', 'income')
-            ->where('category', 'Rent')
-            ->forTenant($rent->tenant_id)
-            ->forUnit($rent->unit_id)
-            ->whereDate(
-                'transacted_at',
-                '<=',
-                $month->copy()->endOfMonth()
-            )
-            ->sum('amount');
-    }
-
-    protected function expectedUntil(RentCycle $rent, Carbon $month): int
-    {
-        if (!$rent->monthly_rent) {
-            return 0;
-        }
-
-        $start = Carbon::parse($rent->start_date)->startOfMonth();
-        $end   = $month->copy()->startOfMonth();
-
-        if ($end->lessThan($start)) {
-            return 0;
-        }
-
-        $months = $start->diffInMonths($end) + 1;
-
-        return $months * $rent->monthly_rent;
-    }
+        HISTORICAL / CARRY — ALL TIME UNTIL MONTH
+    ====================================================== */
 
     public function summaryWithCarry(RentCycle $rent, Carbon $month): array
     {
-        $paid     = $this->totalPaidUntil($rent, $month);
-        $expected = $this->expectedUntil($rent, $month);
+        $billings = RentBilling::query()
+            ->where('rent_cycle_id', $rent->id)
+            ->whereDate(
+                'billing_month',
+                '<=',
+                $month->copy()->endOfMonth()
+            )
+            ->get();
 
-        $balance = $paid - $expected;
+        $expected = $billings->sum('amount');
+
+        $paid = $billings
+            ->whereNotNull('paid_at')
+            ->sum('amount');
+
+        $outstanding = $billings
+            ->whereNull('paid_at')
+            ->sum('amount');
 
         return [
             'expected_total' => $expected,
             'paid_total'     => $paid,
-            'credit'         => max(0, $balance),
-            'debt'           => max(0, -$balance),
-            'status'         => $balance >= 0 ? 'paid' : 'unpaid',
+            'credit'         => max(0, $paid - $expected),
+            'debt'           => max(0, $expected - $paid),
+            'status'         => $outstanding === 0 ? 'paid' : 'unpaid',
         ];
     }
 }

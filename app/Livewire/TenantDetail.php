@@ -28,16 +28,9 @@ class TenantDetail extends Component
     /* =====================================================
         UI STATE
     ====================================================== */
-    public bool $showPaymentModal    = false;
     public bool $showAssignUnitModal = false;
     public bool $showEndRentModal    = false;
-
-    /* =====================================================
-        PAYMENT FORM
-    ====================================================== */
-    public int $amount = 0;
-    public string $paidAt;
-    public string $note = '';
+    public bool $showPaymentModal   = false;
 
     /* =====================================================
         ASSIGN UNIT FORM
@@ -52,6 +45,13 @@ class TenantDetail extends Component
     public string $endNote = '';
 
     /* =====================================================
+        PAYMENT FORM
+    ====================================================== */
+    public int $amount = 0;
+    public string $paidAt;
+    public string $note = '';
+
+    /* =====================================================
         LIFECYCLE
     ====================================================== */
     public function mount(Tenant $tenant): void
@@ -59,16 +59,15 @@ class TenantDetail extends Component
         $this->tenant = $tenant;
 
         $today = now()->toDateString();
-
-        $this->paidAt    = $today;
         $this->startDate = $today;
         $this->endDate   = $today;
+        $this->paidAt    = $today;
 
         $this->reloadData();
     }
 
     /* =====================================================
-        CORE DOMAIN RELOAD (WAJIB DIPANGGIL)
+        CORE RELOAD — SATU-SATUNYA SUMBER KEBENARAN
     ====================================================== */
     protected function reloadData(): void
     {
@@ -80,25 +79,29 @@ class TenantDetail extends Component
             ->with('unit')
             ->first();
 
-        $this->activeInvoices = $this->activeRent
-            ? RentBilling::where('rent_cycle_id', $this->activeRent->id)
-                ->whereNull('paid_at')
-                ->orderBy('due_date')
-                ->get()
-            : collect();
+        // SAFETY DEFAULTS
+        $this->activeInvoices     = collect();
+        $this->rentTransactions  = collect();
+        $this->tenantBillingSummary = null;
+
+        if (! $this->activeRent) {
+            return;
+        }
+
+        $this->activeInvoices = RentBilling::query()
+            ->where('rent_cycle_id', $this->activeRent->id)
+            ->whereNull('paid_at')
+            ->orderBy('billing_month')
+            ->get();
 
         $this->rentTransactions = $this->activeRent
-            ? $this->activeRent
-                ->transactions()
-                ->where('category', 'Rent')
-                ->orderByDesc('transacted_at')
-                ->get()
-            : collect();
+            ->transactions()
+            ->where('category', 'Rent')
+            ->orderByDesc('transacted_at')
+            ->get();
 
-        $this->tenantBillingSummary = $this->activeRent
-            ? app(RentBillingService::class)
-                ->summaryWithCarry($this->activeRent, now())
-            : null;
+        $this->tenantBillingSummary = app(RentBillingService::class)
+            ->summaryWithCarry($this->activeRent, now());
     }
 
     /* =====================================================
@@ -108,6 +111,7 @@ class TenantDetail extends Component
     {
         return Unit::query()
             ->whereDoesntHave('activeRent')
+            ->where('is_active', true)
             ->orderBy('name')
             ->get();
     }
@@ -145,7 +149,7 @@ class TenantDetail extends Component
         app(RentCycleService::class)->startRent(
             unit: Unit::findOrFail($this->selectedUnitId),
             tenant: $this->tenant,
-            startDate: $this->startDate
+            startDate: Carbon::parse($this->startDate)
         );
 
         $this->closeAssignUnitModal();
@@ -198,10 +202,13 @@ class TenantDetail extends Component
             ]);
         }
 
-        $this->resetErrorBag();
+        if (! $this->tenantBillingSummary || $this->tenantBillingSummary['debt'] <= 0) {
+            throw ValidationException::withMessages([
+                'payment' => 'No outstanding rent to pay.',
+            ]);
+        }
 
-        // sensible default: unpaid total
-        $this->amount = $this->tenantBillingSummary['outstanding'] ?? 0;
+        $this->amount = $this->tenantBillingSummary['debt'];
         $this->paidAt = now()->toDateString();
         $this->note   = '';
 
@@ -225,17 +232,14 @@ class TenantDetail extends Component
         app(RentPaymentService::class)->applyPayment(
             rent: $this->activeRent,
             amount: $this->amount,
-            paidAt: $this->paidAt,
-            note: $this->note
+            paidAt: $this->paidAt
+            // NOTE DISENGAJA TIDAK DIKIRIM (SERVICE BELUM SUPPORT)
         );
 
         $this->closePaymentModal();
         $this->reloadData();
     }
 
-    /* =====================================================
-        RENDER
-    ====================================================== */
     public function render()
     {
         return view('livewire.tenant-detail')

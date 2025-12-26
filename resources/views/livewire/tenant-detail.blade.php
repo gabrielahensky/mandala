@@ -21,22 +21,24 @@
                     {{ $tenant->name }}
                 </h1>
 
+                {{-- STATUS — STRICT DOMAIN --}}
                 @if ($activeRent)
-                    <p class="mt-1 inline-flex items-center gap-2 text-sm
-                              bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                        ● Active —
+                    <span class="mt-1 inline-flex items-center gap-2 text-sm
+                                 bg-green-100 text-green-700 px-3 py-1 rounded-full">
+                        ● Active
                         <span class="font-medium">
-                            {{ $activeRent->unit->name }}
+                            — {{ $activeRent->unit->name }}
                         </span>
-                    </p>
+                    </span>
                 @else
-                    <p class="mt-1 inline-flex items-center text-sm
-                              bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
+                    <span class="mt-1 inline-flex items-center text-sm
+                                 bg-gray-100 text-gray-600 px-3 py-1 rounded-full">
                         Inactive
-                    </p>
+                    </span>
                 @endif
             </div>
 
+            {{-- ACTIONS --}}
             <div class="flex flex-wrap gap-2">
                 @if (! $activeRent)
                     <button
@@ -68,9 +70,9 @@
     </div>
 
     {{-- =========================
-        BILLING SUMMARY
+        BILLING SUMMARY (ONLY IF ACTIVE)
     ========================== --}}
-    @if ($tenantBillingSummary)
+    @if ($activeRent && $tenantBillingSummary)
         <section class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div class="bg-white p-4 rounded-xl border">
                 <p class="text-xs text-gray-500">Total Paid</p>
@@ -87,7 +89,7 @@
             </div>
 
             <div class="bg-white p-4 rounded-xl border">
-                <p class="text-xs text-gray-500">Remaining Balance</p>
+                <p class="text-xs text-gray-500">Outstanding</p>
                 @if ($tenantBillingSummary['debt'] > 0)
                     <p class="font-semibold text-red-600">
                         Rp {{ number_format($tenantBillingSummary['debt']) }}
@@ -102,39 +104,25 @@
     @endif
 
     {{-- =========================
-        RENT INVOICES
+        RENT INVOICES (ACTIVE ONLY)
     ========================== --}}
     @if ($activeRent)
         <section class="bg-white rounded-xl border p-5 space-y-4">
-            <div>
-                <h2 class="text-lg font-semibold">Rent Invoices</h2>
-                <p class="text-sm text-gray-500">Outstanding rent bills</p>
-            </div>
+            <h2 class="text-lg font-semibold">Outstanding Invoices</h2>
 
             @forelse ($activeInvoices as $invoice)
-                <div class="flex items-center justify-between border rounded-lg p-3">
+                <div class="flex justify-between border rounded-lg p-3">
                     <div>
                         <p class="font-medium">
                             {{ $invoice->billing_month->format('F Y') }}
                         </p>
                         <p class="text-sm text-gray-500">
                             Due {{ $invoice->due_date->format('d M Y') }}
-                            · Rp {{ number_format($invoice->amount) }}
                         </p>
                     </div>
-
-                    @php $label = $invoice->reminderLabel(); @endphp
-                    @if ($label)
-                        <span class="px-3 py-1 text-xs font-semibold rounded
-                            @class([
-                                'bg-gray-100 text-gray-600' => str_starts_with($label, 'H-') && (int)substr($label, 2) >= 5,
-                                'bg-yellow-100 text-yellow-700' => str_starts_with($label, 'H-') && (int)substr($label, 2) <= 4,
-                                'bg-orange-100 text-orange-700' => $label === 'H',
-                                'bg-red-100 text-red-700' => $label === 'OVERDUE',
-                            ])">
-                            {{ $label }}
-                        </span>
-                    @endif
+                    <div class="font-semibold">
+                        Rp {{ number_format($invoice->amount) }}
+                    </div>
                 </div>
             @empty
                 <p class="text-sm text-gray-500">
@@ -145,7 +133,7 @@
     @endif
 
     {{-- =========================
-        RENT TRANSACTIONS
+        RENT TRANSACTIONS (ACTIVE ONLY)
     ========================== --}}
     @if ($activeRent)
         <section class="bg-white rounded-xl border overflow-x-auto">
@@ -163,7 +151,7 @@
                 </thead>
                 <tbody>
                     @forelse ($rentTransactions as $tx)
-                        <tr class="border-t hover:bg-gray-50">
+                        <tr class="border-t">
                             <td class="px-4 py-2 text-xs text-gray-500">
                                 {{ $tx->transacted_at->format('d M Y') }}
                             </td>
@@ -176,8 +164,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="3" class="px-4 py-6 text-center text-gray-500">
-                                No rent transactions
+                            <td colspan="3"
+                                class="px-4 py-6 text-center text-gray-500">
+                                No transactions
                             </td>
                         </tr>
                     @endforelse
@@ -190,46 +179,65 @@
         ASSIGN UNIT MODAL
     ========================== --}}
     @if ($showAssignUnitModal)
-        <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div class="bg-white rounded-xl w-full max-w-md p-6 space-y-4">
-                <h2 class="text-lg font-semibold">
-                    Assign Unit — {{ $tenant->name }}
-                </h2>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div class="bg-white w-full max-w-md rounded-xl shadow-xl p-6 space-y-6">
 
                 <div>
-                    <label class="text-xs text-gray-500">Unit</label>
-                    <select wire:model="selectedUnitId"
-                            class="w-full border rounded px-3 py-2 text-sm">
+                    <h2 class="text-lg font-semibold">Assign Unit</h2>
+                    <p class="text-sm text-gray-500">
+                        Assign a unit to this tenant
+                    </p>
+                </div>
+
+                {{-- UNIT --}}
+                <div>
+                    <label class="text-xs text-gray-500">Available Unit</label>
+                    <select
+                        wire:model="selectedUnitId"
+                        class="w-full border rounded-lg px-3 py-2 text-sm">
                         <option value="">— Select unit —</option>
-                        @foreach ($availableUnits as $unit)
+
+                        @foreach ($this->availableUnits as $unit)
                             <option value="{{ $unit->id }}">
                                 {{ $unit->name }}
-                                @if ($unit->base_price)
-                                    — Rp {{ number_format($unit->base_price) }}
-                                @endif
                             </option>
                         @endforeach
                     </select>
+
+                    @error('selectedUnitId')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
                 </div>
 
+                {{-- START DATE --}}
                 <div>
                     <label class="text-xs text-gray-500">Start Date</label>
-                    <input type="date" wire:model="startDate"
-                           class="w-full border rounded px-3 py-2">
+                    <input
+                        type="date"
+                        wire:model="startDate"
+                        class="w-full border rounded-lg px-3 py-2 text-sm">
+                    @error('startDate')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
                 </div>
 
+                {{-- ACTION --}}
                 <div class="flex justify-end gap-2 pt-4">
-                    <button type="button"
-                            wire:click="closeAssignUnitModal"
-                            class="px-3 py-2 text-sm text-gray-600">
+                    <button
+                        type="button"
+                        wire:click="closeAssignUnitModal"
+                        class="px-3 py-2 text-sm text-gray-600">
                         Cancel
                     </button>
-                    <button type="button"
-                            wire:click="assignUnit"
-                            class="px-4 py-2 bg-gray-900 text-white text-sm rounded">
+
+                    <button
+                        type="button"
+                        wire:click="assignUnit"
+                        class="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg">
                         Assign
                     </button>
                 </div>
+
             </div>
         </div>
     @endif

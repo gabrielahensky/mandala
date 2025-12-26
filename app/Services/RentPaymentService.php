@@ -13,35 +13,41 @@ class RentPaymentService
     /**
      * Apply a payment to unpaid rent billings (FIFO).
      *
-     * IMPORTANT DOMAIN RULES:
-     * - This service DOES NOT create ledger transactions
+     * DOMAIN RULES (IMPORTANT):
+     * - This service ONLY settles rent billings
+     * - It DOES NOT create ledger transactions
      * - Ledger entries are created via RentBillingPaid event
-     * - Safe to call from:
-     *   - Tenant page
-     *   - Admin dashboard
-     *   - Backfill / migration
+     * - Payment is applied FIFO by billing_month
+     * - Partial payment per billing is NOT supported (by design)
+     *
+     * Safe to call from:
+     * - Tenant detail page
+     * - Unpaid rent dashboard
+     * - Backfill / migration
      */
     public function applyPayment(
         RentCycle $rent,
         int $amount,
-        string $paidAt
+        string $paidAt,
+        ?string $note = null
     ): void {
+        /* -----------------------------------------
+            BASIC VALIDATION
+        ------------------------------------------ */
         if ($amount <= 0) {
             throw ValidationException::withMessages([
                 'amount' => 'Payment amount must be greater than zero.',
             ]);
         }
 
-        DB::transaction(function () use ($rent, $amount, $paidAt) {
+        DB::transaction(function () use ($rent, $amount, $paidAt, $note) {
 
             $paidAt    = Carbon::parse($paidAt);
             $remaining = $amount;
 
-            /*
-            |--------------------------------------------------
-            | Load unpaid billings (FIFO by billing_month)
-            |--------------------------------------------------
-            */
+            /* -----------------------------------------
+                LOAD UNPAID BILLINGS (FIFO)
+            ------------------------------------------ */
             $billings = RentBilling::query()
                 ->where('rent_cycle_id', $rent->id)
                 ->whereNull('paid_at')
@@ -49,32 +55,33 @@ class RentPaymentService
                 ->lockForUpdate()
                 ->get();
 
-            /*
-            |--------------------------------------------------
-            | VALID CASE:
-            | - No unpaid billings (advance / manual payment)
-            |--------------------------------------------------
-            */
+            /* -----------------------------------------
+                VALID CASE:
+                - No unpaid billings
+                - (advance / manual payment)
+            ------------------------------------------ */
             if ($billings->isEmpty()) {
                 return;
             }
 
-            /*
-            |--------------------------------------------------
-            | Apply payment sequentially
-            |--------------------------------------------------
-            */
+            /* -----------------------------------------
+                APPLY PAYMENT SEQUENTIALLY
+            ------------------------------------------ */
             foreach ($billings as $billing) {
                 if ($remaining <= 0) {
                     break;
                 }
 
+                // Only full billing payments are allowed
                 if ($remaining >= $billing->amount) {
-                    // Full payment for this billing
-                    $billing->markPaid($paidAt); // <-- EVENT FIRED HERE
+                    $billing->markPaid(
+                        paidAt: $paidAt,
+                        note: $note 
+                    );
+
                     $remaining -= $billing->amount;
                 } else {
-                    // Partial payment not supported (by design)
+                    // Partial payment not supported (intentional)
                     break;
                 }
             }

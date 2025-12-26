@@ -1,8 +1,8 @@
 <div class="px-6 py-6 space-y-6">
 
-    {{-- =========================
+    {{-- =====================================================
         HEADER
-    ========================== --}}
+    ====================================================== --}}
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <h1 class="text-2xl font-semibold tracking-tight">
@@ -29,9 +29,9 @@
         </div>
     </div>
 
-    {{-- =========================
+    {{-- =====================================================
         TABLE
-    ========================== --}}
+    ====================================================== --}}
     <div class="bg-white rounded-xl border overflow-hidden">
         <table class="w-full text-sm">
             <thead class="bg-gray-100 text-gray-600">
@@ -41,13 +41,12 @@
                     <th class="px-4 py-2 text-right">Expected</th>
                     <th class="px-4 py-2 text-right">Paid</th>
                     <th class="px-4 py-2 text-right text-red-600">Outstanding</th>
-                    <th class="px-4 py-2 text-center">Status</th>
                     <th class="px-4 py-2 text-right">Action</th>
                 </tr>
             </thead>
 
             <tbody>
-                @forelse ($rows as $i => $row)
+                @forelse ($rows as $index => $row)
                     <tr class="border-t hover:bg-gray-50">
                         <td class="px-4 py-2 font-medium">
                             {{ $row['unit']->name }}
@@ -69,24 +68,19 @@
                             Rp {{ number_format($row['outstanding']) }}
                         </td>
 
-                        <td class="px-4 py-2 text-center">
-                            <span class="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700">
-                                UNPAID
-                            </span>
-                        </td>
-
                         <td class="px-4 py-2 text-right">
                             <button
-                                wire:click="openUnitModal({{ $i }})"
+                                type="button"
+                                wire:click="openPaymentModal({{ $index }})"
                                 class="text-xs text-blue-600 hover:underline font-medium">
-                                View & Pay
+                                Pay
                             </button>
                         </td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7"
-                            class="px-4 py-8 text-center text-gray-500">
+                        <td colspan="6"
+                            class="px-4 py-10 text-center text-gray-500">
                             All rents paid 🎉
                         </td>
                     </tr>
@@ -95,43 +89,38 @@
         </table>
     </div>
 
-    {{-- =========================
-        UNIT + PAYMENT MODAL
-    ========================== --}}
-    @if ($showUnitModal)
+    {{-- =====================================================
+        PAYMENT MODAL
+    ====================================================== --}}
+    @if ($showPaymentModal && $rentContext)
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <div class="bg-white w-full max-w-md rounded-xl shadow-xl p-6 space-y-6">
 
                 {{-- HEADER --}}
                 <div>
                     <h2 class="text-lg font-semibold">
-                        Unit Rent Details
+                        Pay Rent
                     </h2>
                     <p class="text-sm text-gray-500">
-                        Unpaid rent overview
+                        {{ $rentContext->tenant->name }}
+                        —
+                        {{ $rentContext->unit->name }}
                     </p>
                 </div>
 
-                {{-- INFO --}}
-                <div class="space-y-3 text-sm">
+                {{-- SUMMARY --}}
+                <div class="grid grid-cols-2 gap-4 text-sm">
                     <div>
                         <p class="text-xs text-gray-500">Unit</p>
                         <p class="font-medium">
-                            {{ $selectedRow['unit']->name }}
+                            {{ $rentContext->unit->name }}
                         </p>
                     </div>
 
                     <div>
                         <p class="text-xs text-gray-500">Tenant</p>
                         <p class="font-medium">
-                            {{ $selectedRow['tenant']->name }}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p class="text-xs text-gray-500">Outstanding</p>
-                        <p class="font-semibold text-red-600">
-                            Rp {{ number_format($selectedRow['outstanding']) }}
+                            {{ $rentContext->tenant->name }}
                         </p>
                     </div>
                 </div>
@@ -145,12 +134,9 @@
                         <input
                             type="number"
                             wire:model.defer="amount"
-                            max="{{ $selectedRow['outstanding'] }}"
                             class="w-full border rounded-lg px-3 py-2 text-sm">
                         @error('amount')
-                            <p class="text-xs text-red-600 mt-1">
-                                {{ $message }}
-                            </p>
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                         @enderror
                     </div>
 
@@ -161,9 +147,7 @@
                             wire:model.defer="paidAt"
                             class="w-full border rounded-lg px-3 py-2 text-sm">
                         @error('paidAt')
-                            <p class="text-xs text-red-600 mt-1">
-                                {{ $message }}
-                            </p>
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                         @enderror
                     </div>
 
@@ -174,9 +158,7 @@
                             wire:model.defer="note"
                             class="w-full border rounded-lg px-3 py-2 text-sm">
                         @error('note')
-                            <p class="text-xs text-red-600 mt-1">
-                                {{ $message }}
-                            </p>
+                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                         @enderror
                     </div>
                 </div>
@@ -185,9 +167,9 @@
                 <div class="flex justify-end gap-2 pt-4">
                     <button
                         type="button"
-                        wire:click="closeUnitModal"
+                        wire:click="closePaymentModal"
                         class="px-3 py-2 text-sm text-gray-600">
-                        Close
+                        Cancel
                     </button>
 
                     <button

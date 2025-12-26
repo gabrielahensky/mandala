@@ -4,129 +4,134 @@ namespace App\Livewire;
 
 use Livewire\Component;
 use Carbon\Carbon;
+use App\Models\RentCycle;
 use App\Services\RentBillingService;
 use App\Services\RentPaymentService;
 use Illuminate\Validation\ValidationException;
 
 class RentUnpaid extends Component
 {
-    /* =========================
-        FILTER STATE
-    ========================== */
+    /* =====================================================
+        FILTER
+    ====================================================== */
     public string $month;
 
-    /* =========================
-        DATA
-    ========================== */
+    /* =====================================================
+        DISPLAY DATA
+    ====================================================== */
     public array $rows = [];
 
-    /* =========================
-        MODAL STATE
-    ========================== */
-    public bool $showUnitModal = false;
-    public array $selectedRow = [];
+    /* =====================================================
+        PAYMENT MODAL STATE
+    ====================================================== */
+    public bool $showPaymentModal = false;
+    public ?RentCycle $rentContext = null;
+    public int $maxPayable = 0;
 
-    /* =========================
+    /* =====================================================
         PAYMENT FORM
-    ========================== */
+    ====================================================== */
     public int $amount = 0;
     public string $paidAt;
-    public string $note = '';
+    public string $note = ''; // UI-only, not sent to service
 
-    protected RentBillingService $billing;
-
-    /* =========================
+    /* =====================================================
         LIFECYCLE
-    ========================== */
-    public function mount(RentBillingService $billing): void
+    ====================================================== */
+    public function mount(): void
     {
-        $this->billing = $billing;
-
         $this->month  = now()->format('Y-m');
         $this->paidAt = now()->toDateString();
 
-        $this->load();
+        $this->reload();
     }
 
     public function updatedMonth(): void
     {
-        $this->load();
+        $this->reload();
     }
 
-    /* =========================
-        CORE LOAD
-    ========================== */
-    protected function load(): void
+    /* =====================================================
+        DATA LOAD
+    ====================================================== */
+    protected function reload(): void
     {
-        $this->rows = $this->billing
+        $billing = app(RentBillingService::class);
+
+        $this->rows = $billing
             ->unpaidRentsForMonth(
                 Carbon::createFromFormat('Y-m', $this->month)
             )
+            ->map(fn ($row) => [
+                'rent'        => $row['rent'],   // RentCycle
+                'unit'        => $row['unit'],
+                'tenant'      => $row['tenant'],
+                'expected'    => $row['expected'],
+                'paid'        => $row['paid'],
+                'outstanding' => $row['outstanding'],
+            ])
             ->values()
             ->toArray();
     }
 
-    /* =========================
-        OPEN / CLOSE MODAL
-    ========================== */
-    public function openUnitModal(int $index): void
+    /* =====================================================
+        OPEN / CLOSE PAYMENT MODAL
+    ====================================================== */
+    public function openPaymentModal(int $index): void
     {
         if (! isset($this->rows[$index])) {
             return;
         }
 
-        $this->selectedRow = $this->rows[$index];
+        $row = $this->rows[$index];
 
-        // default payment = outstanding
-        $this->amount = $this->selectedRow['outstanding'];
+        $this->rentContext = $row['rent'];
+        $this->maxPayable  = $row['outstanding'];
+
+        $this->amount = $row['outstanding'];
         $this->paidAt = now()->toDateString();
         $this->note   = '';
 
-        $this->showUnitModal = true;
+        $this->showPaymentModal = true;
     }
 
-    public function closeUnitModal(): void
+    public function closePaymentModal(): void
     {
-        $this->showUnitModal = false;
-        $this->selectedRow = [];
+        $this->showPaymentModal = false;
+        $this->rentContext = null;
+        $this->maxPayable = 0;
     }
 
-    /* =========================
+    /* =====================================================
         SAVE PAYMENT
-    ========================== */
+    ====================================================== */
     public function savePayment(): void
     {
-        if (! isset($this->selectedRow['rent_cycle'])) {
+        if (! $this->rentContext) {
             throw ValidationException::withMessages([
                 'payment' => 'Invalid rent context.',
             ]);
         }
 
-        $maxAmount = $this->selectedRow['outstanding'];
-
         $this->validate([
-            'amount' => "required|integer|min:1|max:{$maxAmount}",
+            'amount' => "required|integer|min:1|max:{$this->maxPayable}",
             'paidAt' => 'required|date',
             'note'   => 'nullable|string|max:255',
         ]);
 
-        /** @var \App\Services\RentPaymentService $payment */
-        $payment = app(\App\Services\RentPaymentService::class);
-
-        $payment->applyPayment(
-            rent: $this->selectedRow['rent_cycle'],
+        app(RentPaymentService::class)->applyPayment(
+            rent: $this->rentContext,
             amount: $this->amount,
-            paidAt: $this->paidAt,
-            note: $this->note
+            paidAt: $this->paidAt
         );
 
-        $this->closeUnitModal();
-        $this->load();
+        $this->closePaymentModal();
+        $this->reload();
     }
 
-    /* =========================
+    /* =====================================================
         RENDER
-    ========================== */
+    ====================================================== */
     public function render()
     {
         return view('livewire.rent-unpaid')

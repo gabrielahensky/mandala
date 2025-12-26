@@ -31,8 +31,9 @@
             @foreach ($tenants as $tenant)
 
                 @php
-                    $hasActiveRent = $this->tenantHasActiveRent($tenant);
-                    $activeUnit   = $this->tenantActiveUnit($tenant);
+                    /** @var \App\Models\RentCycle|null $activeRent */
+                    $activeRent = $tenant->activeRent;
+                    $activeUnit = $activeRent?->unit;
                 @endphp
 
                 <div class="bg-white border rounded-xl p-4 hover:shadow-sm transition">
@@ -47,7 +48,7 @@
 
                             {{-- STATUS --}}
                             <div class="mt-1">
-                                @if ($hasActiveRent)
+                                @if ($activeRent)
                                     <span class="inline-flex items-center gap-1 text-xs
                                                  bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
                                         ● Active
@@ -77,14 +78,14 @@
                                 Edit
                             </button>
 
-                            @unless ($hasActiveRent)
+                            @if (! $activeRent)
                                 <button
                                     type="button"
                                     wire:click="askDelete({{ $tenant->id }})"
                                     class="text-xs text-red-600 hover:underline">
                                     Delete
                                 </button>
-                            @endunless
+                            @endif
                         </div>
                     </div>
 
